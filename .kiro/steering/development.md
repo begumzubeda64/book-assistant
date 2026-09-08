@@ -18,6 +18,18 @@ Follow this order:
 
 Kiro should not introduce a new AWS service, framework, database, library, or architectural pattern without a concrete requirement.
 
+## Kiro Collaboration and change protocol
+
+These rules apply to all development work (Vibe and Spec):
+
+- **Describe before changing.** Before making any file changes, state clearly what will change and which files are impacted, then wait for approval.
+- **Approve before executing.** Before running any command, explain what it does and why, then wait for approval.
+- **Reason every recommendation.** Give explicit reasoning and tradeoffs for any recommendation, not just the conclusion.
+- **Use official references.** When debugging or fixing, consult official/reference documentation and cite the source.
+- **Progressive disclosure of context.** Read only the files, folders, routes, or components relevant to the task at hand; do not scan the codebase more broadly than the task requires.
+
+In Autopilot mode these are self-enforced through this steering file; Supervised mode additionally gates file edits at the IDE level.
+
 ## Backend development rules
 
 - Build a conventional FastAPI application.
