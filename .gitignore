@@ -10,7 +10,9 @@ env
 # IDE
 .vscode/
 .idea/
-# .kiro/
+
+# Kiro specs/steering — tracked on dev, ignored on main (main may be made public)
+.kiro/
 
 # Logs
 *.log
