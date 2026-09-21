@@ -1,0 +1,40 @@
+# Version control
+.git/
+.gitignore
+
+# Kiro
+.kiro/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend (not part of backend image)
+frontend/
+node_modules/
+
+# Infrastructure
+infrastructure/
+
+# Docs / meta
+docs/
+*.md
+!README.md
+
+# Environment / secrets
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

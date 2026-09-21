@@ -2,9 +2,15 @@
 __pycache__/
 *.py[cod]
 .venv/
+venv/
+
+# uv
+# (uv.lock is committed; caches are not)
 
 # Environment
 .env
+.env.*
+!.env.example
 env
 
 # IDE
@@ -18,6 +24,8 @@ env
 # Testing
 .pytest_cache/
 .coverage
+htmlcov/
+coverage.xml
 
 # Ruff
 .ruff_cache/
@@ -27,6 +35,23 @@ env
 
 # Docker
 *.pid
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+# Ignore secret/local var files, but keep committed environment defaults.
+*.auto.tfvars
+secrets.tfvars
+*.tfvars.local
+# .terraform.lock.hcl is intentionally committed (provider pinning).
 
 # macOS
 .DS_Store
