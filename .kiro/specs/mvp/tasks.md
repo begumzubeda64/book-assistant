@@ -30,12 +30,13 @@ turn precede frontend integration, hardening, CI/CD, and validation.
 
 - [ ] 3. AWS container infrastructure (Terraform, `eu-central-1`)
   - [ ] 3.1 Create the VPC with two or more AZs, public subnets for the ALB, and private subnets for ECS tasks.
-  - [ ] 3.2 Create the ECS cluster, ECR repository, and CloudWatch log group.
+  - [ ] 3.2 Create the ECS cluster and two ECR repositories (FastAPI image, agent image), plus a CloudWatch log group.
   - [ ] 3.3 Create the ECS task execution role and a least-privilege task role.
   - [ ] 3.4 Create the Fargate task definition and ECS service with health checks.
   - [ ] 3.5 Create the ALB, target group, and HTTPS certificate.
-  - [ ] 3.6 Configure ECS service auto scaling and Terraform outputs for the API endpoint and ECR repository.
-  - _Requirements: 9.1, 9.2, 9.5, 10.2, 10.3_
+  - [ ] 3.6 Provision the AgentCore Runtime (agent container image, execution role, endpoint) and the SQS queue for job triggering.
+  - [ ] 3.7 Configure ECS service auto scaling and Terraform outputs for the API endpoint, ECR repositories, and AgentCore endpoint.
+  - _Requirements: 9.1, 9.2, 9.5, 10.2, 10.3, 8.4_
 
 - [ ] 4. Authentication
   - [ ] 4.1 Create the Cognito User Pool and app client configuration.
@@ -61,30 +62,30 @@ turn precede frontend integration, hardening, CI/CD, and validation.
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 8.1_
 
 - [ ] 7. Book ingestion and GraphRAG
-  - [ ] 7.1 Create the Step Functions ingestion workflow with a content extraction/preparation step.
+  - [ ] 7.1 Build the LangGraph ingestion agent (content extraction/preparation node) triggered from SQS.
   - [ ] 7.2 Preserve chapter/section/page/source metadata where available.
   - [ ] 7.3 Configure the Bedrock Knowledge Base and Neptune Analytics GraphRAG integration in `eu-central-1`.
   - [ ] 7.4 Ingest authorized book content and store ingestion status in DynamoDB.
-  - [ ] 7.5 Add retry/idempotency handling.
+  - [ ] 7.5 Package and deploy the ingestion agent to AgentCore Runtime; add retry/idempotency handling.
   - [ ] 7.6 Test GraphRAG retrieval against representative book questions.
-  - _Requirements: 5.2, 5.3, 8.2, 8.3_
+  - _Requirements: 5.2, 5.3, 8.2, 8.3, 8.4_
 
 - [ ] 8. Adaptive reading
   - [ ] 8.1 Implement the reading request schema (duration, mode, focus).
-  - [ ] 8.2 Implement word-budget calculation, section importance scoring, and content selection.
-  - [ ] 8.3 Implement the condensed-reading generation prompt, source-reference attachment, and output validation.
-  - [ ] 8.4 Create the `ADAPTIVE_READING` Step Functions workflow and store results in S3.
+  - [ ] 8.2 Implement the LangGraph adaptive-reading graph with deterministic nodes: word-budget calculation, section importance scoring, content selection.
+  - [ ] 8.3 Implement the condensed-reading generation node, source-reference attachment, and output-validation node.
+  - [ ] 8.4 Deploy the adaptive-reading agent to AgentCore Runtime (SQS-triggered for the `ADAPTIVE_READING` job) and store results in S3.
   - [ ] 8.5 Expose job status/result APIs.
-  - [ ] 8.6 Add tests for the 3/5/10-minute targets and coherence.
-  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
+  - [ ] 8.6 Add tests for the graph nodes and the 3/5/10-minute targets and coherence.
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 8.4_
 
 - [ ] 9. Discussion assistant
   - [ ] 9.1 Create the conversation/message DynamoDB model.
-  - [ ] 9.2 Implement the discussion creation endpoint and GraphRAG query adapter.
+  - [ ] 9.2 Build the LangGraph discussion agent (GraphRAG query node) and deploy it to AgentCore Runtime; implement the discussion endpoint that invokes it.
   - [ ] 9.3 Add conversation context handling and generate grounded answers with source references.
   - [ ] 9.4 Persist messages.
   - [ ] 9.5 Add authorization tests and cross-chapter relationship test cases.
-  - _Requirements: 5.1, 5.3, 5.4, 5.5, 1.3_
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 1.3, 8.4_
 
 - [ ] 10. Reading progress
   - [ ] 10.1 Create the progress repository and save/update endpoint.
@@ -221,7 +222,8 @@ Key dependencies:
 - **Region**: all infrastructure and AI services are provisioned in
   `eu-central-1` (see `design.md`, "Architecture → Region").
 - **Async rule**: ingestion and adaptive-reading generation run as jobs
-  (SQS/Step Functions), never inline in an HTTP request.
+  (SQS → LangGraph agent on AgentCore Runtime → S3/DynamoDB), never inline in an
+  HTTP request. Step Functions and orchestration Lambda are not used.
 - **Idempotency**: job-creation and upload tasks (6, 7, 8) must be safe against
   retries; verify no duplicate expensive results are produced.
 - **Authorization**: every user-owned resource task must include an authorization

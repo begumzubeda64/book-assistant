@@ -60,10 +60,12 @@ book-companion/
 │   │   ├── schemas/
 │   │   ├── ai/
 │   │   ├── integrations/
+│   │   ├── agents/
 │   │   ├── workflows/
 │   │   └── core/
 │   ├── tests/
 │   ├── Dockerfile
+│   ├── Dockerfile.agent
 │   └── pyproject.toml
 │
 ├── infrastructure/
@@ -76,8 +78,8 @@ book-companion/
 │   │   │   ├── cognito/
 │   │   │   ├── storage/
 │   │   │   ├── database/
-│   │   │   ├── messaging/
-│   │   │   ├── ai/
+│   │   │   ├── messaging/        # SQS
+│   │   │   ├── ai/               # Bedrock KB/GraphRAG + AgentCore Runtime
 │   │   │   └── observability/
 │   │   ├── environments/
 │   │   │   ├── dev/
@@ -130,7 +132,7 @@ Repositories abstract persistence and external systems:
 - Cognito helpers
 - Google Books/Open Library clients
 - Bedrock/Knowledge Base client wrappers
-- Step Functions/SQS clients
+- SQS client and AgentCore invocation client
 
 ### Schemas
 
@@ -140,9 +142,14 @@ Pydantic request/response schemas belong in `schemas/` and should be explicit.
 
 AI-specific prompt construction, GraphRAG retrieval adapters, citation normalization, and output validation belong in `ai/`.
 
-### Workflows
+### Agents and workflows
 
-Workflow orchestration helpers belong in `workflows/`. Long-running execution is performed by Step Functions/Lambda/SQS rather than by blocking FastAPI requests.
+LangGraph graph definitions (nodes, state, edges) and AgentCore deployment
+configuration belong in `agents/`. `workflows/` holds thin helpers that create
+jobs, enqueue to SQS, and invoke AgentCore agents. Long-running execution runs
+in LangGraph agents on AgentCore Runtime, triggered via SQS, rather than by
+blocking FastAPI requests. Agents are packaged as their own container image,
+separate from the FastAPI image.
 
 ## Naming
 

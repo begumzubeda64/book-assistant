@@ -29,6 +29,8 @@ development parity, and Fargate runs the containers without managing servers.
 - FastAPI + Pydantic v2
 - Uvicorn/Gunicorn-compatible production container startup
 - boto3 for AWS integrations
+- LangGraph for agentic orchestration
+- `bedrock-agentcore` SDK for building and deploying agents
 - pytest, Ruff, mypy where useful
 
 ## Container platform
@@ -72,6 +74,17 @@ traversal. A vector-only implementation must not be labelled GraphRAG. Neptune
 Analytics is for GraphRAG knowledge representation, not the general application
 database.
 
+### Agentic AI
+
+Agentic, multi-step work (adaptive-reading generation and GraphRAG discussion
+reasoning) is built as **LangGraph** graphs and deployed on **Amazon Bedrock
+AgentCore Runtime**, which hosts the agents as a container image, isolates
+sessions, and scales them without managing servers. AgentCore Runtime is
+framework-agnostic and available in `eu-central-1`. Agents run as their own
+container image (separate from the FastAPI image) and are invoked from the
+backend. Keep agent tool permissions explicit and allowlisted (see
+`security.md`); deterministic steps stay deterministic (see `development.md`).
+
 **The deployment region is `eu-central-1` (Europe, Frankfurt).** All
 infrastructure and AI services are provisioned there. Frankfurt is a supported
 region for Bedrock Knowledge Bases GraphRAG with Neptune Analytics, so it
@@ -85,9 +98,13 @@ returns a `job_id` immediately, and does not run ingestion or generation inline.
 (The full pattern and rationale are in `development.md`; the workflow diagrams
 are in the spec.)
 
-Primitives: Step Functions for multi-step orchestration, SQS for durable
-queuing, and Lambda for small event-driven steps. DynamoDB holds job status; S3
-holds large results.
+Pattern: FastAPI creates a job → **SQS** durably queues it → a **LangGraph agent
+on AgentCore Runtime** performs the multi-step work → results go to **S3** and
+status to **DynamoDB**. SQS plus the DynamoDB job record are the durable async
+boundary (at-least-once delivery, retry, idempotency). The multi-step
+orchestration itself lives in the LangGraph graph rather than in Step Functions.
+AWS Step Functions and orchestration Lambda are not used in the MVP; do not
+reintroduce them without a concrete requirement.
 
 MVP job types: `BOOK_INGESTION` and `ADAPTIVE_READING`. Summary-style output is a
 content *focus* of adaptive reading, not a separate job. (Podcast and audiobook
@@ -102,11 +119,12 @@ concrete API surface is defined in the spec and in Pydantic schemas.
 
 ## Infrastructure as Code
 
-All infrastructure is owned by Terraform — networking, ALB, ECS, ECR, Cognito,
-S3, DynamoDB, SQS, Step Functions, IAM, CloudWatch, Secrets Manager,
-CloudFront/S3 hosting, and the Bedrock/Knowledge Base/GraphRAG resources with
-Terraform support. Do not hand-create production infrastructure Terraform is
-meant to own. The module layout is in `structure.md`.
+All infrastructure is owned by Terraform — networking, ALB, ECS, ECR (FastAPI
+image and agent image), Cognito, S3, DynamoDB, SQS, IAM, CloudWatch, Secrets
+Manager, CloudFront/S3 hosting, the Bedrock/Knowledge Base/GraphRAG resources,
+and the AgentCore Runtime resources with Terraform support. Do not hand-create
+production infrastructure Terraform is meant to own. The module layout is in
+`structure.md`.
 
 ## Observability
 

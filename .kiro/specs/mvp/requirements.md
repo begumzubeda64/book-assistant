@@ -80,7 +80,7 @@ material.
 #### Acceptance Criteria
 
 1. WHEN a user asks a question about an authorized book THE SYSTEM SHALL answer it.
-2. WHEN discussion retrieval runs THE SYSTEM SHALL use Bedrock Knowledge Bases GraphRAG backed by Neptune Analytics.
+2. WHEN discussion retrieval runs THE SYSTEM SHALL use Bedrock Knowledge Bases GraphRAG backed by Neptune Analytics, orchestrated by a LangGraph agent on Amazon Bedrock AgentCore Runtime.
 3. WHEN a question requires relationships across chapters, concepts, entities, or arguments THE SYSTEM SHALL support answering it.
 4. WHEN source metadata is available THE SYSTEM SHALL include chapter/page/section/source references in answers.
 5. WHEN a user returns to a discussion THE SYSTEM SHALL have stored prior messages and allow the user to continue.
@@ -114,8 +114,9 @@ visible status, so that the app stays responsive.
 #### Acceptance Criteria
 
 1. WHEN a job runs THE SYSTEM SHALL expose its status including queued, processing, completed, and failed states.
-2. WHEN long-running work is triggered THE SYSTEM SHALL use SQS and/or Step Functions rather than blocking FastAPI requests.
+2. WHEN long-running work is triggered THE SYSTEM SHALL queue it on SQS and perform the processing in a LangGraph agent on AgentCore Runtime rather than blocking FastAPI requests.
 3. WHEN a job is retried THE SYSTEM SHALL execute idempotently or in a safely retryable manner so duplicate expensive results are not produced.
+4. THE SYSTEM SHALL deploy and operate the agents on Amazon Bedrock AgentCore Runtime as a container image separate from the FastAPI service.
 
 ### Requirement 9: Security and observability
 
@@ -157,11 +158,17 @@ stateless, and documented, so that it is easy to develop and operate.
 - **GraphRAG** — Retrieval-augmented generation using Bedrock Knowledge Bases
   backed by Neptune Analytics, combining vector search with graph traversal over
   entities, concepts, and relationships. A vector-only path is not GraphRAG.
+- **LangGraph** — The agentic framework used to express multi-step orchestration
+  (ingestion, adaptive-reading generation, GraphRAG discussion) as stateful
+  graphs of nodes and edges.
+- **AgentCore** — Amazon Bedrock AgentCore Runtime, the managed platform that
+  hosts, isolates, scales, and versions the LangGraph agents as a container
+  image, invoked off the request path. Available in `eu-central-1`.
 - **Discussion / conversation** — A persisted question-and-answer thread about an
   authorized book, grounded in retrieved source material with source references.
 - **Job** — An asynchronous unit of work (`BOOK_INGESTION`, `ADAPTIVE_READING`)
   created by the API, tracked by status, and executed off the request path via
-  SQS/Step Functions.
+  SQS and a LangGraph agent on AgentCore Runtime.
 - **Ingestion** — The pipeline that extracts and prepares an authorized uploaded
   PDF and loads it into the Bedrock Knowledge Base / Neptune Analytics graph.
 - **Recommendation** — A suggested book produced by transparent, testable scoring

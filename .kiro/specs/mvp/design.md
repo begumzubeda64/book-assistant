@@ -14,6 +14,13 @@ The system has three primary capabilities — **adaptive reading**, **GraphRAG
 discussion**, and **recommendations** — supported by book discovery, authorized
 PDF upload, asynchronous job processing, and reading-progress tracking.
 
+The agentic, multi-step work (ingestion, adaptive-reading generation, and
+GraphRAG discussion reasoning) is built with **LangGraph** and deployed on
+**Amazon Bedrock AgentCore Runtime**. FastAPI creates jobs and returns
+immediately; **SQS** durably queues them and the agents perform the work off the
+request path. AWS Step Functions and orchestration Lambda are not used in the
+MVP.
+
 ### Why ECS Fargate + FastAPI
 
 The product has multiple API domains, authentication dependencies, validation,
@@ -46,18 +53,19 @@ management; it is simply not a Lambda-only architecture.
                                 │
                     ECS Fargate FastAPI Service
                                 │
-        ┌───────────────────────┼────────────────────────┐
-        ▼                       ▼                        ▼
-    DynamoDB                   S3                     AWS AI
-        │                       │                        │
-        │                       ├──────────────┐         │
-        │                       ▼              │         ▼
-        │                 SQS / Step Functions │   Bedrock Knowledge
-        │                       │              │   Bases + Neptune
-        │                       ▼              │   Analytics GraphRAG
-        │                Lambda/workflows      │
-        │                       │              │
-        └───────────────────────┴──────────────┴─────────┘
+        ┌───────────────────────┼───────────────────────────┐
+        ▼                       ▼                           ▼
+    DynamoDB                   S3                        Bedrock KB +
+    (state/jobs)          (PDFs/results)                 Neptune Analytics
+        ▲                       ▲                         GraphRAG
+        │                       │                            ▲
+        │                       │                            │
+        │              SQS (durable queue)                   │
+        │                       │                            │
+        │                       ▼                            │
+        └──────── AgentCore Runtime (LangGraph agents) ──────┘
+                         │
+                     Bedrock (LLM inference)
 ```
 
 The API is a conventional FastAPI application deployed as an ECS Fargate service,
@@ -72,12 +80,12 @@ standard containerized web architecture on AWS.
 | Cognito | Authentication |
 | ALB | HTTPS termination, routing, health checks |
 | ECS/Fargate | FastAPI runtime |
-| ECR | Container image registry |
-| DynamoDB | Application state |
+| ECR | Container image registry (FastAPI image + agent image) |
+| DynamoDB | Application state and job status |
 | S3 | PDFs and generated artifacts |
-| SQS | Durable asynchronous queue |
-| Step Functions | Multi-step orchestration |
-| Lambda | Small event-driven workflow steps |
+| SQS | Durable asynchronous queue (job trigger) |
+| AgentCore Runtime | Hosts and scales the LangGraph agents |
+| LangGraph | Multi-step agentic orchestration (runs on AgentCore) |
 | Bedrock | LLM inference |
 | Bedrock Knowledge Bases + Neptune Analytics | GraphRAG retrieval |
 | CloudWatch | Logs/metrics/alarms |
@@ -90,7 +98,8 @@ The deployment region is fixed at **`eu-central-1` (Europe, Frankfurt)**. All
 infrastructure, data, and AI services are provisioned there.
 
 Frankfurt is a supported region for Bedrock Knowledge Bases GraphRAG with
-Neptune Analytics, so the required GraphRAG capability is available in-region.
+Neptune Analytics, and for Amazon Bedrock AgentCore, so both the required
+GraphRAG capability and the AgentCore agent runtime are available in-region.
 When selecting foundation models, confirm the specific model IDs are available
 in `eu-central-1` (model availability is narrower than service availability).
 
@@ -121,7 +130,7 @@ Application service
    ↓
 Repository / AWS integration
    ↓
-DynamoDB / S3 / Bedrock / SQS / Step Functions
+DynamoDB / S3 / Bedrock / SQS / AgentCore
 ```
 
 The FastAPI layer must not become a place where all business logic accumulates.
@@ -174,7 +183,8 @@ ingestion.
 ```text
 Frontend → FastAPI requests upload URL → Authorization + validation
      → Presigned S3 URL → Browser uploads directly to S3
-     → job trigger creates BOOK_INGESTION job → SQS → Step Functions
+     → job trigger creates BOOK_INGESTION job → SQS
+     → LangGraph ingestion agent on AgentCore Runtime
      → Extract/chunk/prepare content → Bedrock Knowledge Base ingestion
      → Neptune Analytics GraphRAG → DynamoDB job status
 ```
@@ -185,12 +195,17 @@ The PDF itself must not travel through FastAPI.
 
 ```text
 POST /api/v1/reading/generate → FastAPI validates request
-     → Create ADAPTIVE_READING job → Return job_id → SQS / Step Functions
-     → Load authorized chapter/content → Identify sections → Rank sections
-     → Allocate target word budget → Generate coherent condensed reading
-     → Validate output → Attach source references → Store result in S3
-     → Update DynamoDB job
+     → Create ADAPTIVE_READING job → Return job_id → SQS
+     → LangGraph adaptive-reading agent on AgentCore Runtime:
+       Load authorized chapter/content → Identify sections → Rank sections
+       → Allocate target word budget → Generate coherent condensed reading
+       → Validate output → Attach source references
+     → Store result in S3 → Update DynamoDB job
 ```
+
+The graph's deterministic nodes (section identification, ranking, word-budget
+allocation, output validation) use plain algorithms; only the condensed-prose
+generation calls the model.
 
 Ranking inputs: section position, headings, semantic importance,
 argument/evidence indicators, repetition/centrality, and relationship to the
@@ -207,15 +222,19 @@ coherence.
 ### GraphRAG discussion
 
 ```text
-User question → FastAPI discussion endpoint → Conversation context
-     → Bedrock Knowledge Base GraphRAG query
-     → Neptune Analytics graph + vector retrieval
-     → Relevant entities/concepts/relationships/source chunks
-     → Bedrock generation → Grounded answer + source references
+User question → FastAPI discussion endpoint → Load conversation context
+     → Invoke LangGraph discussion agent on AgentCore Runtime:
+       Bedrock Knowledge Base GraphRAG query
+       → Neptune Analytics graph + vector retrieval
+       → Relevant entities/concepts/relationships/source chunks
+       → Bedrock generation → Grounded answer + source references
      → DynamoDB conversation persistence
 ```
 
 GraphRAG is particularly useful for cross-chapter and relationship questions.
+The discussion agent is authorized against the requesting `user_id` and only
+retrieves content that user may access. Longer generations follow the async job
+pattern; short interactive turns invoke the agent directly.
 
 ### Recommendations
 
@@ -313,7 +332,14 @@ Failure path: `QUEUED/PROCESSING → FAILED`
   expensive results; use an idempotency key or deterministic job identity.
 - **Progress idempotency.** Progress writes are idempotent and ownership-checked.
 - **No blocking work.** Long-running ingestion or generation never runs inline in
-  an HTTP request; the API returns a `job_id` immediately.
+  an HTTP request; the API returns a `job_id` immediately, and the work is queued
+  on SQS and executed by a LangGraph agent on AgentCore Runtime.
+- **Deterministic where possible.** Agentic graphs keep deterministic steps
+  (section ranking, word-budget allocation, output validation) as plain
+  algorithms; the model is used only where generation is actually required.
+- **Allowlisted agent tools.** Agents may only use explicitly allowlisted tools
+  and cannot invoke arbitrary AWS APIs; structured output is validated before it
+  is stored or returned.
 - **Coherent adaptive output.** Generated reading is coherent condensed prose
   within the word-budget target, not truncation or an unstructured bullet list.
 - **Grounded answers.** Discussion answers are grounded in retrieved source
@@ -348,6 +374,8 @@ the job-status API rather than as an HTTP error on the original request.
 - Test repositories with mocks and selected integration tests.
 - Test job state transitions and idempotency.
 - Test GraphRAG integration behind an adapter.
-- Test Docker build locally.
+- Test LangGraph graphs locally (deterministic nodes directly; model/tool calls
+  mocked) and validate the AgentCore invocation adapter.
+- Test the FastAPI image and the agent image builds locally.
 - Test Terraform validation.
 - Run an end-to-end happy path before production deployment.

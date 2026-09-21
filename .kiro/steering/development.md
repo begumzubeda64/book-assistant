@@ -58,25 +58,39 @@ Any operation that may take more than a normal interactive request window must b
 
 Pattern:
 
-`FastAPI → create job → SQS/Step Functions → processing → S3/DynamoDB → status/result`
+`FastAPI → create job → SQS → LangGraph agent on AgentCore → S3/DynamoDB → status/result`
 
-The API returns a job ID without waiting for completion.
+The API returns a job ID without waiting for completion. SQS plus the DynamoDB
+job record are the durable boundary; Step Functions and orchestration Lambda are
+not used in the MVP.
+
+## Agentic AI rules
+
+- Use **LangGraph** to express multi-step orchestration (nodes, state, edges);
+  keep deterministic steps deterministic rather than delegating them to the model.
+- Deploy and operate agents on **Amazon Bedrock AgentCore Runtime** as a
+  container image, separate from the FastAPI image.
+- Agents are triggered off the request path (via SQS), never inline in an HTTP
+  request.
+- Keep agent tool permissions explicit and allowlisted (see `security.md`);
+  validate structured model output before storing or returning it.
 
 ## Adaptive reading implementation
 
-Adaptive reading must be an actual pipeline, not simple truncation. Use
-deterministic algorithms wherever possible (word-budget allocation, section
-scoring, source coverage, duplicate reduction). The full pipeline and the WPM
-word-budget targets are defined in the MVP spec (`design.md`, "Components and
-Interfaces → Adaptive reading") — follow them there rather than restating them
-here.
+Adaptive reading must be an actual pipeline, not simple truncation. It runs as a
+LangGraph graph on AgentCore Runtime. Use deterministic algorithms wherever
+possible (word-budget allocation, section scoring, source coverage, duplicate
+reduction). The full pipeline and the WPM word-budget targets are defined in the
+MVP spec (`design.md`, "Components and Interfaces → Adaptive reading") — follow
+them there rather than restating them here.
 
 ## GraphRAG discussion implementation
 
-GraphRAG is required in the MVP. Do not create a separate vector-only path to
-simplify implementation; simple questions use the same managed retrieval path.
-The retrieval flow is in the spec (`design.md`, "Components and Interfaces →
-GraphRAG discussion").
+GraphRAG is required in the MVP. Discussion orchestration runs as a LangGraph
+agent on AgentCore Runtime over Bedrock Knowledge Bases GraphRAG. Do not create a
+separate vector-only path to simplify implementation; simple questions use the
+same managed retrieval path. The retrieval flow is in the spec (`design.md`,
+"Components and Interfaces → GraphRAG discussion").
 
 ## Recommendations
 

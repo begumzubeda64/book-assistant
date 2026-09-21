@@ -81,7 +81,7 @@ The UI must clearly distinguish **original estimated reading time** from
 - Social network features.
 - Public book uploads.
 - Full audiobook/podcast production.
-- Complex multi-agent orchestration.
+- Complex or uncontrolled multi-agent sprawl. (Scoped LangGraph agents deployed on Amazon Bedrock AgentCore are in scope; unbounded agent-to-agent orchestration is not.)
 - Custom vector database or custom graph database pipeline outside managed Bedrock GraphRAG.
 - Microservice sprawl.
 - Kubernetes.
