@@ -25,7 +25,7 @@ development parity, and Fargate runs the containers without managing servers.
 
 ## Backend
 
-- Python 3.12
+- Python 3.11
 - FastAPI + Pydantic v2
 - Uvicorn/Gunicorn-compatible production container startup
 - boto3 for AWS integrations
