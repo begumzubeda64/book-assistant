@@ -1,26 +1,71 @@
 """Adaptive reading endpoints.
 
-    POST /api/v1/reading/generate
-    GET  /api/v1/reading/{reading_id}
+    POST /api/v1/reading/generate   -> create ADAPTIVE_READING job (async)
+    GET  /api/v1/reading/{reading_id} -> fetch the generated reading
 
-Implemented in task group 8 (adaptive reading). Generation is asynchronous:
-the endpoint creates an ADAPTIVE_READING job and returns a job_id immediately.
+Generation runs off the request path: the endpoint creates a job and returns a
+job_id immediately (requirement 4.7). The reading_id equals the job_id.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, status
 
+from src.api.dependencies import (
+    CurrentUser,
+    JobServiceDep,
+    ReadingResultRepoDep,
+)
+from src.core.errors import NotFoundError, ValidationAppError
+from src.models.job import JobType
+from src.schemas.jobs import JobCreatedResponse
+from src.schemas.reading import ReadingGenerateRequest, ReadingResult
+
 router = APIRouter(prefix="/reading", tags=["reading"])
 
 
-@router.post("/generate", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def generate_reading() -> dict[str, str]:
-    """Create an adaptive-reading job and return a job_id (not yet implemented)."""
-    return {"detail": "not_implemented"}
+@router.post(
+    "/generate",
+    response_model=JobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_reading(
+    user: CurrentUser,
+    jobs: JobServiceDep,
+    request: ReadingGenerateRequest,
+) -> JobCreatedResponse:
+    """Create an adaptive-reading job and return a job_id immediately."""
+    try:
+        request.validate_duration()
+    except ValueError as exc:
+        raise ValidationAppError(str(exc)) from exc
+
+    job = await jobs.create_and_enqueue(
+        user_id=user.user_id,
+        job_type=JobType.ADAPTIVE_READING,
+        book_id=request.book_id,
+        idempotency_key=(
+            f"reading:{user.user_id}:{request.book_id}:{request.chapter_id}:"
+            f"{request.duration_minutes}:{request.mode.value}:{request.focus.value}"
+        ),
+        chapter_id=request.chapter_id,
+        target_duration=request.duration_minutes,
+        mode=request.mode.value,
+        focus=request.focus.value,
+    )
+    return JobCreatedResponse(job_id=job.job_id, status=job.status)
 
 
-@router.get("/{reading_id}", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def get_reading(reading_id: str) -> dict[str, str]:
-    """Fetch a generated adaptive reading result (not yet implemented)."""
-    return {"detail": "not_implemented"}
+@router.get("/{reading_id}", response_model=ReadingResult)
+async def get_reading(
+    user: CurrentUser,
+    results: ReadingResultRepoDep,
+    reading_id: str,
+) -> ReadingResult:
+    """Fetch a generated adaptive reading (scoped to the requesting user)."""
+    payload = await results.get(user.user_id, reading_id)
+    if payload is None:
+        raise NotFoundError(
+            "The requested reading could not be found", code="READING_NOT_FOUND"
+        )
+    return ReadingResult.model_validate(payload)

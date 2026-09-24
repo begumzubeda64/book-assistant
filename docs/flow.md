@@ -173,12 +173,44 @@ SQS BOOK_INGESTION → IngestionAgent.handle_message
 - Config (agent/MCP tier): `UPLOADS_BUCKET_NAME`, `KB_CHUNK_BUCKET_NAME`,
   `KNOWLEDGE_BASE_ID`, `KNOWLEDGE_BASE_DATA_SOURCE_ID`.
 
+## Adaptive reading pipeline (implemented — agent tier)
+
+The adaptive-reading agent (`agents/adaptive_reading/`, its own image) consumes
+an `ADAPTIVE_READING` SQS job and runs a LangGraph graph. Only the generate node
+calls the model; everything else is a deterministic algorithm (design.md).
+
+```
+POST /api/v1/reading/generate (auth; duration 3/5/10, mode, focus)
+  → JobService.create_and_enqueue(ADAPTIVE_READING)  (idempotent) → job_id
+  → SQS → AdaptiveReadingAgent.handle_message → job PROCESSING
+      → load    (MCP get_book_content → prepared chunks)
+      → budget  (150 WPM → 450 / 750 / 1500 words)
+      → select  (rank by position + headings + argument/evidence + centrality
+                 + focus, then pick to budget, restore reading order)
+      → generate (MCP generate_text → coherent condensed prose)  [only model call]
+      → validate (reject empty / bullet-dump / gross overrun)
+      → refs     (dedupe source references)
+      → store   (MCP store_reading_result → S3 readings/{user}/{reading_id}.json)
+  → job COMPLETED (result_location) or FAILED
+
+GET /api/v1/reading/{reading_id} → S3ReadingResultRepository (user-scoped) → ReadingResult
+```
+
+- reading_id == job_id. Ranking never just takes the first N words.
+- Output is coherent prose within a generous word-budget tolerance (req 4.5);
+  source references are retained (req 4.6).
+- Config: `KB_CHUNK_BUCKET_NAME`, `READING_RESULTS_BUCKET_NAME`,
+  `GENERATION_MODEL_ID`.
+
 ## Tool tier (MCP server)
 
 - Package: `mcp_server/` (FastMCP server) + `mcp_server/tools/`.
 - `TOOL_ALLOWLIST` is the single source of truth for permitted tools.
-- Implemented (ingestion): `get_authorized_content`, `ingest_to_knowledge_base`.
-  GraphRAG retrieval + concept persistence are added with the discussion group.
+- Implemented: `get_authorized_content`, `ingest_to_knowledge_base`,
+  `get_book_content`, `generate_text`, `store_reading_result`. GraphRAG
+  retrieval + concept persistence are added with the discussion group.
+- `generate_text` is the single model-calling capability; agents never invoke
+  Bedrock directly.
 - Re-checks authorization on every call; never exposes arbitrary AWS APIs.
 
 ## Book discovery flow (implemented)

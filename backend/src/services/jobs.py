@@ -43,6 +43,7 @@ class JobService:
             book_id=book_id,
             status=JobStatus.QUEUED,
             idempotency_key=idempotency_key,
+            chapter_id=params.get("chapter_id"),  # type: ignore[arg-type]
             target_duration=params.get("target_duration"),  # type: ignore[arg-type]
             mode=params.get("mode"),  # type: ignore[arg-type]
             focus=params.get("focus"),  # type: ignore[arg-type]

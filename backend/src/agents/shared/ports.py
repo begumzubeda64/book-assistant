@@ -37,3 +37,29 @@ class KnowledgeBasePort(Protocol):
         boundary so GraphRAG retrieval can be scoped later (security.md).
         """
         ...
+
+
+class BookContentPort(Protocol):
+    """Read access to a user's prepared (ingested) book content."""
+
+    def get_chunks(
+        self, *, user_id: str, book_id: str, chapter_id: str | None = None
+    ) -> list[PreparedChunk]:
+        """Return prepared chunks for a book/chapter the user may access."""
+        ...
+
+
+class TextGenerationPort(Protocol):
+    """Foundation-model text generation (the only model call in a graph)."""
+
+    def generate(self, *, prompt: str, max_words: int) -> str:
+        """Generate text for the prompt, targeting an approximate word budget."""
+        ...
+
+
+class ReadingStorePort(Protocol):
+    """Persistence for generated adaptive-reading results (backed by S3)."""
+
+    def store_reading(self, *, user_id: str, reading_id: str, payload: str) -> str:
+        """Store a reading result. Returns its storage location."""
+        ...

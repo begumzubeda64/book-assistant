@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     knowledge_base_id: str | None = None
     knowledge_base_data_source_id: str | None = None
 
+    # Adaptive reading (agent + MCP tier)
+    reading_results_bucket_name: str | None = None
+    generation_model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

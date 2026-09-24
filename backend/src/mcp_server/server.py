@@ -18,6 +18,11 @@ from __future__ import annotations
 import base64
 from typing import Any
 
+from src.agents.shared.ports import (
+    BookContentPort,
+    ReadingStorePort,
+    TextGenerationPort,
+)
 from src.agents.shared.types import PreparedChunk
 from src.core.config import Settings
 from src.mcp_server.tools.content import ContentTool
@@ -25,7 +30,13 @@ from src.mcp_server.tools.knowledge_base import KnowledgeBaseTool
 
 # The single source of truth for what the agents are permitted to invoke.
 TOOL_ALLOWLIST = frozenset(
-    {"get_authorized_content", "ingest_to_knowledge_base"}
+    {
+        "get_authorized_content",
+        "ingest_to_knowledge_base",
+        "get_book_content",
+        "generate_text",
+        "store_reading_result",
+    }
 )
 
 
@@ -87,3 +98,35 @@ def create_mcp_server(content: ContentTool, kb: KnowledgeBaseTool) -> Any:
         )
 
     return server
+
+
+def register_reading_tools(
+    server: Any,
+    *,
+    book_content: BookContentPort,
+    generator: TextGenerationPort,
+    reading_store: ReadingStorePort,
+) -> None:
+    """Register the adaptive-reading tools on an existing MCP server."""
+
+    @server.tool(name="get_book_content")
+    def get_book_content(
+        user_id: str, book_id: str, chapter_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Return prepared chunks for an authorized book/chapter."""
+        chunks = book_content.get_chunks(
+            user_id=user_id, book_id=book_id, chapter_id=chapter_id
+        )
+        return [c.model_dump() for c in chunks]
+
+    @server.tool(name="generate_text")
+    def generate_text(prompt: str, max_words: int) -> str:
+        """Generate text for the prompt (foundation model)."""
+        return generator.generate(prompt=prompt, max_words=max_words)
+
+    @server.tool(name="store_reading_result")
+    def store_reading_result(user_id: str, reading_id: str, payload: str) -> str:
+        """Store a generated adaptive-reading result; returns its location."""
+        return reading_store.store_reading(
+            user_id=user_id, reading_id=reading_id, payload=payload
+        )

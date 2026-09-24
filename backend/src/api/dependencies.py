@@ -24,6 +24,7 @@ from src.core.errors import ServiceUnavailableError, UnauthorizedError
 from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
 
 if TYPE_CHECKING:
+    from src.repositories.reading_results import ReadingResultRepository
     from src.services.book_discovery import BookDiscoveryService
     from src.services.jobs import JobService
     from src.services.progress import ProgressService
@@ -212,18 +213,38 @@ def get_progress_service(settings: SettingsDep) -> ProgressService:
 
 ProgressServiceDep = Annotated["ProgressService", Depends(get_progress_service)]
 
+
+def get_reading_result_repository(
+    settings: SettingsDep,
+) -> ReadingResultRepository:
+    """Reader for stored adaptive-reading results; requires the results bucket."""
+    from src.repositories.reading_results import S3ReadingResultRepository
+
+    if not settings.reading_results_bucket_name:
+        raise ServiceUnavailableError("Reading results are not configured")
+    return S3ReadingResultRepository.from_settings(
+        settings, settings.reading_results_bucket_name
+    )
+
+
+ReadingResultRepoDep = Annotated[
+    "ReadingResultRepository", Depends(get_reading_result_repository)
+]
+
 __all__ = [
     "AuthenticatedUser",
     "BookServiceDep",
     "CurrentUser",
     "JobServiceDep",
     "ProgressServiceDep",
+    "ReadingResultRepoDep",
     "SettingsDep",
     "UploadServiceDep",
     "get_book_discovery_service",
     "get_current_user",
     "get_job_service",
     "get_progress_service",
+    "get_reading_result_repository",
     "get_upload_service",
     "get_validator",
 ]

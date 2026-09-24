@@ -43,3 +43,8 @@ output "kb_chunk_bucket_name" {
   description = "Prepared-chunk bucket name (KB_CHUNK_BUCKET_NAME)."
   value       = module.ai.kb_chunk_bucket_name
 }
+
+output "reading_results_bucket_name" {
+  description = "Reading-results bucket name (READING_RESULTS_BUCKET_NAME)."
+  value       = module.storage.reading_results_bucket_name
+}
