@@ -35,6 +35,31 @@ class Settings(BaseSettings):
     # AWS (region is fixed to Frankfurt per tech steering)
     aws_region: str = "eu-central-1"
 
+    # Cognito authentication. Unset locally until the pool is provisioned.
+    cognito_user_pool_id: str | None = None
+    cognito_client_id: str | None = None
+
+    # Explicit, opt-in local auth bypass for development only. Must never be
+    # enabled outside app_env=local; it is ignored in dev/prod.
+    auth_allow_local_dev_user: bool = False
+    local_dev_user_id: str = "local-dev-user"
+
+    @property
+    def cognito_issuer(self) -> str | None:
+        """The expected JWT issuer (iss) for the configured user pool."""
+        if not self.cognito_user_pool_id:
+            return None
+        return (
+            f"https://cognito-idp.{self.aws_region}.amazonaws.com/"
+            f"{self.cognito_user_pool_id}"
+        )
+
+    @property
+    def cognito_jwks_url(self) -> str | None:
+        """The JWKS endpoint for the configured user pool."""
+        issuer = self.cognito_issuer
+        return f"{issuer}/.well-known/jwks.json" if issuer else None
+
     # Local emulation endpoints (unset in real AWS; boto3 uses defaults there)
     dynamodb_endpoint_url: str | None = None
     aws_endpoint_url: str | None = None

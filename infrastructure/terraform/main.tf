@@ -45,10 +45,10 @@ locals {
 #   name_prefix = local.name_prefix
 # }
 #
-# module "cognito" {
-#   source      = "./modules/cognito"
-#   name_prefix = local.name_prefix
-# }
+module "cognito" {
+  source      = "./modules/cognito"
+  name_prefix = local.name_prefix
+}
 #
 # module "storage" {
 #   source      = "./modules/storage"

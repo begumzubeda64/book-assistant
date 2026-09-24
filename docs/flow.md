@@ -45,6 +45,29 @@ Rules: routers stay thin; business logic lives in services; AWS SDK calls are
 behind repositories/integrations; the application tier never imports agent graph
 code.
 
+### Authentication & authorization
+
+```
+request with Authorization: Bearer <jwt>
+   → get_current_user dependency (api/dependencies.py)
+       → CognitoJwtValidator (core/security/cognito.py)
+           → verify RS256 signature against pool JWKS
+           → verify exp / iss / token_use / audience(client_id)
+           → claims → AuthenticatedUser(user_id = sub)
+   → services use assert_owner(user, resource_owner_id)  (core/security/authorization.py)
+       → mismatch → 403 FORBIDDEN ; missing → 404 NOT_FOUND
+```
+
+- The trusted `user_id` is the token `sub`; a client-supplied user id is never
+  trusted (security requirement 1.3).
+- Protected routes **fail closed**: if Cognito is unconfigured or the token is
+  missing/invalid, the request is rejected with 401.
+- Local development: an opt-in bypass (`AUTH_ALLOW_LOCAL_DEV_USER=true`) returns
+  a fixed dev user, and only when `APP_ENV=local`. It is ignored everywhere else.
+- Cognito User Pool + app client are provisioned by `modules/cognito`; the pool
+  id and client id feed the backend as `COGNITO_USER_POOL_ID` /
+  `COGNITO_CLIENT_ID`.
+
 ## The three agents
 
 | Agent | Package | Trigger | Job type | Output |
