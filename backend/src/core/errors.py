@@ -67,6 +67,12 @@ class ValidationAppError(AppError):
     message = "The request was invalid"
 
 
+class ServiceUnavailableError(AppError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "SERVICE_UNAVAILABLE"
+    message = "The service is temporarily unavailable"
+
+
 def _error_body(code: str, message: str, request_id: str | None) -> dict[str, object]:
     return {"error": {"code": code, "message": message, "request_id": request_id}}
 

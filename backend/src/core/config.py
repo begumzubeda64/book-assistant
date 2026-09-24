@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     book_cache_table_name: str | None = None
     book_provider_timeout_seconds: float = 8.0
 
+    # Uploads and async jobs
+    uploads_bucket_name: str | None = None
+    jobs_table_name: str | None = None
+    jobs_queue_url: str | None = None
+    verify_uploaded_object: bool = False
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

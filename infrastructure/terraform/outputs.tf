@@ -13,3 +13,18 @@ output "cognito_client_id" {
   description = "Cognito app client ID for the backend (COGNITO_CLIENT_ID)."
   value       = module.cognito.user_pool_client_id
 }
+
+output "uploads_bucket_name" {
+  description = "Private uploads bucket name (UPLOADS_BUCKET_NAME)."
+  value       = module.storage.uploads_bucket_name
+}
+
+output "jobs_queue_url" {
+  description = "Job queue URL (JOBS_QUEUE_URL)."
+  value       = module.messaging.jobs_queue_url
+}
+
+output "jobs_table_name" {
+  description = "Jobs table name (JOBS_TABLE_NAME)."
+  value       = module.database.jobs_table_name
+}

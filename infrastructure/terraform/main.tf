@@ -50,20 +50,20 @@ module "cognito" {
   name_prefix = local.name_prefix
 }
 #
-# module "storage" {
-#   source      = "./modules/storage"
-#   name_prefix = local.name_prefix
-# }
+module "storage" {
+  source      = "./modules/storage"
+  name_prefix = local.name_prefix
+}
 #
-# module "database" {
-#   source      = "./modules/database"
-#   name_prefix = local.name_prefix
-# }
+module "database" {
+  source      = "./modules/database"
+  name_prefix = local.name_prefix
+}
 #
-# module "messaging" {
-#   source      = "./modules/messaging"
-#   name_prefix = local.name_prefix
-# }
+module "messaging" {
+  source      = "./modules/messaging"
+  name_prefix = local.name_prefix
+}
 #
 # module "ai" {
 #   source      = "./modules/ai"

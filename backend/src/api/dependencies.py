@@ -20,11 +20,13 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.config import Settings, get_settings
-from src.core.errors import UnauthorizedError
+from src.core.errors import ServiceUnavailableError, UnauthorizedError
 from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
 
 if TYPE_CHECKING:
     from src.services.book_discovery import BookDiscoveryService
+    from src.services.jobs import JobService
+    from src.services.uploads import UploadService
 
 # auto_error=False so we can raise our own consistent error envelope.
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -132,12 +134,69 @@ BookServiceDep = Annotated[
     "BookDiscoveryService", Depends(get_book_discovery_service)
 ]
 
+
+def _build_job_service(settings: Settings) -> JobService:
+    """Construct the JobService with DynamoDB repo + SQS queue (or no-op)."""
+    import boto3
+
+    from src.integrations.sqs import NullQueue, QueuePort, SqsQueue
+    from src.repositories.jobs import DynamoDBJobRepository
+    from src.services.jobs import JobService
+
+    if not settings.jobs_table_name:
+        raise ServiceUnavailableError("Job storage is not configured")
+
+    dynamodb = boto3.resource(
+        "dynamodb",
+        region_name=settings.aws_region,
+        endpoint_url=settings.dynamodb_endpoint_url,
+    )
+    repo = DynamoDBJobRepository(dynamodb.Table(settings.jobs_table_name))
+
+    queue: QueuePort
+    if settings.jobs_queue_url:
+        queue = SqsQueue.from_settings(settings, settings.jobs_queue_url)
+    else:
+        queue = NullQueue()
+
+    return JobService(repository=repo, queue=queue)
+
+
+def get_job_service(settings: SettingsDep) -> JobService:
+    return _build_job_service(settings)
+
+
+JobServiceDep = Annotated["JobService", Depends(get_job_service)]
+
+
+def get_upload_service(settings: SettingsDep) -> UploadService:
+    """Construct the UploadService; requires a configured uploads bucket."""
+    from src.integrations.s3_storage import S3Storage
+    from src.services.uploads import UploadService
+
+    if not settings.uploads_bucket_name:
+        raise ServiceUnavailableError("Uploads are not configured")
+
+    storage = S3Storage.from_settings(settings, settings.uploads_bucket_name)
+    return UploadService(
+        storage=storage,
+        jobs=_build_job_service(settings),
+        verify_object_exists=settings.verify_uploaded_object,
+    )
+
+
+UploadServiceDep = Annotated["UploadService", Depends(get_upload_service)]
+
 __all__ = [
     "AuthenticatedUser",
     "BookServiceDep",
     "CurrentUser",
+    "JobServiceDep",
     "SettingsDep",
+    "UploadServiceDep",
     "get_book_discovery_service",
     "get_current_user",
+    "get_job_service",
+    "get_upload_service",
     "get_validator",
 ]

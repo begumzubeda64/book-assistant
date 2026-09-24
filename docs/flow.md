@@ -79,6 +79,28 @@ request with Authorization: Bearer <jwt>
 Each agent is a LangGraph graph whose deterministic nodes are plain algorithms;
 the model is called only where generation is actually required.
 
+## Authorized upload flow (implemented)
+
+```
+1. POST /api/v1/uploads/presign (auth; authorized_confirmation=true; pdf; size<=50MB)
+   → UploadService.presign
+   → S3Storage.presign_put -> short-lived presigned PUT for uploads/{user_id}/{book_id}.pdf
+   → returns { book_id, upload_url, object_key }
+2. Browser PUTs the PDF DIRECTLY to S3 (never through FastAPI)
+3. POST /api/v1/books/{book_id}/ingest { object_key }
+   → UploadService.complete_and_ingest
+   → verify key belongs to user (prefix) and matches book_id; optional S3 existence check
+   → JobService.create_and_enqueue(BOOK_INGESTION) — idempotent on "ingest:{object_key}"
+   → Job (DynamoDB, QUEUED) + SQS message
+   → returns { job_id, status }
+```
+
+- The uploads bucket is private (public access blocked); access only via
+  presigned URLs. Keys are namespaced per user for server-side ownership checks.
+- Backend config: `UPLOADS_BUCKET_NAME`, `JOBS_TABLE_NAME`, `JOBS_QUEUE_URL`
+  (from Terraform `storage`/`database`/`messaging` outputs). Without a queue, a
+  no-op queue is used locally; without a jobs table, job endpoints return 503.
+
 ## Async job flow (ingestion, adaptive reading)
 
 ```

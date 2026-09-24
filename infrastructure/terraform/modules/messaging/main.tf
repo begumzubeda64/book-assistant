@@ -1,7 +1,22 @@
-# Messaging module (skeleton).
+# Messaging module.
 #
-# Responsibility: SQS queue(s) that durably trigger the LangGraph agents on
-# AgentCore Runtime, with a dead-letter queue and redrive policy. SQS plus the
-# DynamoDB job record form the durable async boundary (at-least-once delivery).
-#
-# Resources are added in the async job / ingestion task groups.
+# SQS queue that durably triggers the LangGraph agents, plus a dead-letter queue
+# with a redrive policy. SQS + the DynamoDB job record are the durable async
+# boundary (at-least-once delivery, retry). Agents are idempotent so redelivery
+# does not produce duplicate expensive results.
+
+resource "aws_sqs_queue" "jobs_dlq" {
+  name                      = "${var.name_prefix}-jobs-dlq"
+  message_retention_seconds = 1209600 # 14 days
+}
+
+resource "aws_sqs_queue" "jobs" {
+  name                       = "${var.name_prefix}-jobs"
+  visibility_timeout_seconds = var.visibility_timeout_seconds
+  message_retention_seconds  = 345600 # 4 days
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
+    maxReceiveCount     = var.max_receive_count
+  })
+}
