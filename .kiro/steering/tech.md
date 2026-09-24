@@ -31,6 +31,8 @@ development parity, and Fargate runs the containers without managing servers.
 - boto3 for AWS integrations
 - LangGraph for agentic orchestration
 - `bedrock-agentcore` SDK for building and deploying agents
+- Model Context Protocol (MCP) for the agent tool boundary (tools run as a
+  separate MCP server, not in-process with the agents)
 - pytest, Ruff, mypy where useful
 
 ## Container platform
@@ -76,14 +78,41 @@ database.
 
 ### Agentic AI
 
-Agentic, multi-step work (adaptive-reading generation and GraphRAG discussion
-reasoning) is built as **LangGraph** graphs and deployed on **Amazon Bedrock
-AgentCore Runtime**, which hosts the agents as a container image, isolates
-sessions, and scales them without managing servers. AgentCore Runtime is
-framework-agnostic and available in `eu-central-1`. Agents run as their own
-container image (separate from the FastAPI image) and are invoked from the
-backend. Keep agent tool permissions explicit and allowlisted (see
-`security.md`); deterministic steps stay deterministic (see `development.md`).
+Agentic, multi-step work is built as **LangGraph** graphs and deployed on
+**Amazon Bedrock AgentCore Runtime**, which hosts agents as container images,
+isolates sessions, and scales them without managing servers. AgentCore Runtime
+is framework-agnostic and available in `eu-central-1`. Deterministic steps stay
+deterministic (see `development.md`).
+
+**Isolation is a first-class architectural goal.** The system is separated into
+three tiers that fail independently:
+
+1. **Application tier** — the FastAPI service (its own image on ECS Fargate).
+2. **Agent tier** — the LangGraph agents (on AgentCore Runtime).
+3. **Tool tier** — the MCP tool server (its own image/process).
+
+**Three agents, three isolated images.** There are exactly three LangGraph
+agents, and each is packaged as its **own container image** deployed to its
+**own AgentCore Runtime**, so they deploy, scale, version, and fail
+independently — one agent cannot crash another, and each carries only its own
+dependencies:
+
+| Agent | Trigger | Job type |
+|---|---|---|
+| Ingestion agent | SQS (async) | `BOOK_INGESTION` |
+| Adaptive-reading agent | SQS (async) | `ADAPTIVE_READING` |
+| Discussion agent | Direct invoke (interactive) | — |
+
+All three agent images are separate from the FastAPI image.
+
+**Tools live in a separate MCP server, not in-process with the agents.** Agent
+capabilities (e.g. GraphRAG retrieval, authorized-content access, concept
+persistence) are exposed as explicit, allowlisted tools by a **Model Context
+Protocol (MCP) server** that runs as its own image/process. Agents call tools
+over MCP, so a misbehaving tool is contained to the tool tier and cannot crash
+an agent or the API. The MCP server enforces the allowlist and never exposes
+arbitrary AWS APIs (see `security.md`). This is a deliberate isolation choice
+over an in-process tool design; see `decisions.md`.
 
 **The deployment region is `eu-central-1` (Europe, Frankfurt).** All
 infrastructure and AI services are provisioned there. Frankfurt is a supported
@@ -98,13 +127,16 @@ returns a `job_id` immediately, and does not run ingestion or generation inline.
 (The full pattern and rationale are in `development.md`; the workflow diagrams
 are in the spec.)
 
-Pattern: FastAPI creates a job → **SQS** durably queues it → a **LangGraph agent
-on AgentCore Runtime** performs the multi-step work → results go to **S3** and
-status to **DynamoDB**. SQS plus the DynamoDB job record are the durable async
-boundary (at-least-once delivery, retry, idempotency). The multi-step
-orchestration itself lives in the LangGraph graph rather than in Step Functions.
-AWS Step Functions and orchestration Lambda are not used in the MVP; do not
-reintroduce them without a concrete requirement.
+Pattern: FastAPI creates a job → **SQS** durably queues it → the **matching
+LangGraph agent on its own AgentCore Runtime** performs the multi-step work
+(calling tools via the MCP server) → results go to **S3** and status to
+**DynamoDB**. SQS plus the DynamoDB job record are the durable async boundary
+(at-least-once delivery, retry, idempotency), and it is also the strong
+isolation boundary between the application tier and the agent tier: if an agent
+fails, the API keeps serving and the job moves to a retryable/`FAILED` state.
+The multi-step orchestration itself lives in the LangGraph graph rather than in
+Step Functions. AWS Step Functions and orchestration Lambda are not used in the
+MVP; do not reintroduce them without a concrete requirement.
 
 MVP job types: `BOOK_INGESTION` and `ADAPTIVE_READING`. Summary-style output is a
 content *focus* of adaptive reading, not a separate job. (Podcast and audiobook
@@ -119,11 +151,12 @@ concrete API surface is defined in the spec and in Pydantic schemas.
 
 ## Infrastructure as Code
 
-All infrastructure is owned by Terraform — networking, ALB, ECS, ECR (FastAPI
-image and agent image), Cognito, S3, DynamoDB, SQS, IAM, CloudWatch, Secrets
-Manager, CloudFront/S3 hosting, the Bedrock/Knowledge Base/GraphRAG resources,
-and the AgentCore Runtime resources with Terraform support. Do not hand-create
-production infrastructure Terraform is meant to own. The module layout is in
+All infrastructure is owned by Terraform — networking, ALB, ECS, ECR (the
+FastAPI image, one image per agent, and the MCP tool-server image), Cognito, S3,
+DynamoDB, SQS, IAM, CloudWatch, Secrets Manager, CloudFront/S3 hosting, the
+Bedrock/Knowledge Base/GraphRAG resources, and the AgentCore Runtime resources
+(one per agent) with Terraform support. Do not hand-create production
+infrastructure Terraform is meant to own. The module layout is in
 `structure.md`.
 
 ## Observability

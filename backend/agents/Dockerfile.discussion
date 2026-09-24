@@ -1,0 +1,26 @@
+# Discussion agent image (LangGraph on Amazon Bedrock AgentCore Runtime).
+#
+# One of three ISOLATED agent images (see decisions.md). Separate from the
+# FastAPI image and the other agent images. Unlike the two async agents, the
+# discussion agent is invoked directly for short interactive turns.
+#
+# Build context is backend/:  docker build -f agents/Dockerfile.discussion .
+#
+# Stub for milestone 1: the LangGraph graph and bedrock-agentcore entrypoint are
+# implemented in task group 9.
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN groupadd --system agent && useradd --system --gid agent --home /app agent
+
+WORKDIR /app
+
+COPY --chown=agent:agent src/agents/shared ./agents/shared
+COPY --chown=agent:agent src/agents/discussion ./agents/discussion
+
+USER agent
+
+CMD ["python", "-c", "print('discussion agent placeholder - implemented in group 9')"]

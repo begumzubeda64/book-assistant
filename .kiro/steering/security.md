@@ -72,6 +72,22 @@ inclusion: always
 - Keep tool permissions explicit and allowlisted.
 - Validate structured model output before storing or returning it.
 
+### Agent and tool isolation
+
+- Agents do not call AWS or business logic directly; they obtain capabilities
+  only through the **MCP tool server**, which is the single enforcement point
+  for the tool allowlist.
+- The MCP server exposes only explicitly allowlisted tools and must never
+  provide arbitrary AWS API access.
+- MCP tools re-check authorization against the caller's `user_id`; they never
+  assume the caller already authorized the request, and document text can never
+  change authorization or tool permissions (prompt-injection resistance).
+- The three agents run as isolated images/runtimes and must not share process
+  state; a tool or agent failure must be contained to its own tier and not
+  cascade to the API.
+- Give each tier (API, each agent, MCP server) its own least-privilege IAM role
+  scoped to only what that tier needs.
+
 ## Logging
 
 Never log:

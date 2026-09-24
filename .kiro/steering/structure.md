@@ -60,26 +60,37 @@ book-companion/
 │   │   ├── schemas/
 │   │   ├── ai/
 │   │   ├── integrations/
-│   │   ├── agents/
+│   │   ├── agents/               # one isolated LangGraph agent per subpackage
+│   │   │   ├── shared/           # common graph/state/runtime helpers
+│   │   │   ├── ingestion/
+│   │   │   ├── adaptive_reading/
+│   │   │   └── discussion/
+│   │   ├── mcp_server/           # MCP tool server (separate deployable)
+│   │   │   ├── server.py
+│   │   │   └── tools/            # allowlisted tool implementations
 │   │   ├── workflows/
 │   │   └── core/
 │   ├── tests/
-│   ├── Dockerfile
-│   ├── Dockerfile.agent
+│   ├── Dockerfile                # FastAPI application image
+│   ├── Dockerfile.mcp            # MCP tool-server image
+│   ├── agents/
+│   │   ├── Dockerfile.ingestion
+│   │   ├── Dockerfile.adaptive_reading
+│   │   └── Dockerfile.discussion
 │   └── pyproject.toml
 │
 ├── infrastructure/
 │   ├── terraform/
 │   │   ├── modules/
 │   │   │   ├── networking/
-│   │   │   ├── ecs/
+│   │   │   ├── ecs/              # FastAPI service (+ MCP tool server)
 │   │   │   ├── alb/
-│   │   │   ├── ecr/
+│   │   │   ├── ecr/              # repos: api, mcp, 3 agent images
 │   │   │   ├── cognito/
 │   │   │   ├── storage/
 │   │   │   ├── database/
 │   │   │   ├── messaging/        # SQS
-│   │   │   ├── ai/               # Bedrock KB/GraphRAG + AgentCore Runtime
+│   │   │   ├── ai/               # Bedrock KB/GraphRAG + 3 AgentCore Runtimes
 │   │   │   └── observability/
 │   │   ├── environments/
 │   │   │   ├── dev/
@@ -142,14 +153,38 @@ Pydantic request/response schemas belong in `schemas/` and should be explicit.
 
 AI-specific prompt construction, GraphRAG retrieval adapters, citation normalization, and output validation belong in `ai/`.
 
-### Agents and workflows
+### Agents (isolated, one image each)
 
-LangGraph graph definitions (nodes, state, edges) and AgentCore deployment
-configuration belong in `agents/`. `workflows/` holds thin helpers that create
-jobs, enqueue to SQS, and invoke AgentCore agents. Long-running execution runs
-in LangGraph agents on AgentCore Runtime, triggered via SQS, rather than by
-blocking FastAPI requests. Agents are packaged as their own container image,
-separate from the FastAPI image.
+Each of the three LangGraph agents is an isolated subpackage under `agents/`
+(`ingestion/`, `adaptive_reading/`, `discussion/`), with shared graph/state
+helpers in `agents/shared/`. Each subpackage holds its own graph definition
+(nodes, state, edges) and AgentCore deployment configuration, and is packaged as
+its **own container image** (`agents/Dockerfile.<agent>`) deployed to its **own
+AgentCore Runtime**. Agents deploy, scale, version, and fail independently; one
+agent's code, dependencies, or failure must not affect another or the FastAPI
+image.
+
+Agents do not call AWS or business logic directly. They obtain capabilities
+through the **MCP tool server** (see below). Long-running execution runs in the
+agents on AgentCore Runtime, triggered via SQS, rather than by blocking FastAPI
+requests.
+
+### MCP tool server (isolated tool tier)
+
+The `mcp_server/` package is a separate deployable (`Dockerfile.mcp`) that
+exposes allowlisted agent capabilities over the Model Context Protocol —
+GraphRAG retrieval, authorized-content access, concept persistence, and similar.
+Tool implementations live in `mcp_server/tools/`. Running tools in their own
+process/container isolates tool failures from the agents and the API, and gives
+one enforced allowlist boundary (see `security.md`). Tools must not expose
+arbitrary AWS APIs, and they re-check authorization; they never trust a caller
+to have already done so.
+
+### Workflows
+
+`workflows/` holds thin helpers that create jobs, enqueue to SQS, and invoke the
+correct AgentCore agent. It is the application-tier seam to the agent tier and
+must stay thin (no orchestration logic — that lives in the LangGraph graphs).
 
 ## Naming
 
@@ -166,11 +201,18 @@ Prefer:
 
 `router → service → repository/integration`
 
+Agent tier:
+
+`agent (LangGraph graph) → MCP tool server → AWS`
+
 Do not allow:
 - router → raw boto3 everywhere
 - frontend → AWS credentials
 - service → HTTP framework-specific response objects unless necessary
 - repository → business policy
 - AI prompt code scattered through routers
+- agent → direct AWS/boto3 or business logic (must go through the MCP tool server)
+- application tier → importing agent graph code (cross the boundary via SQS/invoke only)
+- one agent → importing another agent's code (share only via `agents/shared/`)
 
 Keep business logic independent from FastAPI wherever practical so it remains testable and portable.

@@ -17,11 +17,24 @@ src/
   repositories/      DynamoDB / persistence abstractions
   integrations/      External systems (S3, Cognito, book providers, SQS)
   ai/                Prompt construction, GraphRAG adapters, output validation
-  agents/            LangGraph graph definitions + AgentCore config
+  agents/            Three ISOLATED LangGraph agents (one image each):
+                       shared/, ingestion/, adaptive_reading/, discussion/
+  mcp_server/        MCP tool server (isolated tool tier): server.py, tools/
   workflows/         Job creation / SQS enqueue / AgentCore invocation helpers
   models/            Domain models
 tests/               pytest unit + API tests
 ```
+
+## Images
+
+- `Dockerfile` — FastAPI application
+- `Dockerfile.mcp` — MCP tool server
+- `agents/Dockerfile.ingestion` — ingestion agent
+- `agents/Dockerfile.adaptive_reading` — adaptive-reading agent
+- `agents/Dockerfile.discussion` — discussion agent
+
+Each is built with `backend/` as the build context. See `docs/flow.md` for how
+the tiers interact and `docs/decisions.md` for why they are isolated.
 
 ## Commands
 

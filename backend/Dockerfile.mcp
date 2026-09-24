@@ -1,0 +1,28 @@
+# MCP tool-server image.
+#
+# The ISOLATED tool tier (see decisions.md). Exposes allowlisted agent
+# capabilities (GraphRAG retrieval, authorized-content access, concept
+# persistence, ...) over the Model Context Protocol. Runs as its own
+# image/process so a tool failure cannot crash an agent or the API. Separate
+# from the FastAPI image and the agent images.
+#
+# Build context is backend/:  docker build -f Dockerfile.mcp .
+#
+# Stub for milestone 1: the MCP server and tool implementations are added
+# alongside the agent groups (7-9). The image builds now so CI/ECR wiring can be
+# established early.
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN groupadd --system mcp && useradd --system --gid mcp --home /app mcp
+
+WORKDIR /app
+
+COPY --chown=mcp:mcp src/mcp_server ./mcp_server
+
+USER mcp
+
+CMD ["python", "-c", "print('mcp tool-server placeholder - implemented with groups 7-9')"]

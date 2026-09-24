@@ -68,12 +68,19 @@ not used in the MVP.
 
 - Use **LangGraph** to express multi-step orchestration (nodes, state, edges);
   keep deterministic steps deterministic rather than delegating them to the model.
-- Deploy and operate agents on **Amazon Bedrock AgentCore Runtime** as a
-  container image, separate from the FastAPI image.
-- Agents are triggered off the request path (via SQS), never inline in an HTTP
-  request.
-- Keep agent tool permissions explicit and allowlisted (see `security.md`);
-  validate structured model output before storing or returning it.
+- There are exactly **three agents** (ingestion, adaptive-reading, discussion).
+  Each is its **own container image** on its **own AgentCore Runtime**, isolated
+  so they deploy and fail independently. Do not merge them into one image, and
+  do not add more agents without a concrete requirement.
+- Each agent image is separate from the FastAPI image.
+- Agents are triggered off the request path (async agents via SQS; the
+  discussion agent by direct invoke), never inline in an HTTP request.
+- Agents obtain capabilities only through the **MCP tool server** — a separate
+  deployable that owns the explicit, allowlisted tools. Agents must not call AWS
+  or business logic directly. Validate structured model output before storing or
+  returning it. (See `security.md` for the tool/isolation rules and
+  `decisions.md` for why.)
+- Keep agent-to-agent coupling at zero; share only via `agents/shared/`.
 
 ## Adaptive reading implementation
 

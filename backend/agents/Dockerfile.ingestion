@@ -1,0 +1,29 @@
+# Ingestion agent image (LangGraph on Amazon Bedrock AgentCore Runtime).
+#
+# One of three ISOLATED agent images (see decisions.md). Separate from the
+# FastAPI image and from the other agent images, so it deploys, scales, and
+# fails independently and carries only its own dependencies (PDF extraction,
+# chunking, KB ingestion).
+#
+# Build context is backend/:  docker build -f agents/Dockerfile.ingestion .
+#
+# Stub for milestone 1: the LangGraph graph and bedrock-agentcore entrypoint are
+# implemented in task group 7. The image builds now so CI/ECR wiring can be
+# established early.
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN groupadd --system agent && useradd --system --gid agent --home /app agent
+
+WORKDIR /app
+
+# Each agent copies only shared helpers + its own package.
+COPY --chown=agent:agent src/agents/shared ./agents/shared
+COPY --chown=agent:agent src/agents/ingestion ./agents/ingestion
+
+USER agent
+
+CMD ["python", "-c", "print('ingestion agent placeholder - implemented in group 7')"]
