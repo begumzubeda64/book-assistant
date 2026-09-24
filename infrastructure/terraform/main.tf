@@ -65,10 +65,10 @@ module "messaging" {
   name_prefix = local.name_prefix
 }
 #
-# module "ai" {
-#   source      = "./modules/ai"
-#   name_prefix = local.name_prefix
-# }
+module "ai" {
+  source      = "./modules/ai"
+  name_prefix = local.name_prefix
+}
 #
 # module "observability" {
 #   source      = "./modules/observability"

@@ -147,11 +147,38 @@ GET /api/v1/progress/{book_id} (auth)
 5. grounded answer + source references returned; message persisted in DynamoDB
 ```
 
+## Ingestion pipeline (implemented — agent tier)
+
+The ingestion agent (`agents/ingestion/`, its own image + AgentCore runtime)
+consumes a `BOOK_INGESTION` SQS message and runs a LangGraph graph:
+
+```
+SQS BOOK_INGESTION → IngestionAgent.handle_message
+  → job status PROCESSING (DynamoDB)
+  → graph: fetch (MCP get_authorized_content → S3)
+         → extract_text (pypdf, per page)
+         → chunk_with_metadata (preserve chapter/section/page/source)
+         → ingest (MCP ingest_to_knowledge_base)
+             → write chunks to S3 under prepared/{user_id}/{book_id}/
+             → start Bedrock KB ingestion job (Neptune Analytics GraphRAG)
+  → job status COMPLETED (result_location = ingestion ref) or FAILED
+```
+
+- Deterministic nodes (extract/chunk) are plain algorithms; no model call.
+- Agent reaches S3/Bedrock only through MCP tools (`get_authorized_content`,
+  `ingest_to_knowledge_base`), which re-check ownership and preserve the
+  per-user access boundary + source provenance for later scoped retrieval.
+- Idempotent/retry-safe: terminal jobs are skipped on redelivery; chunk storage
+  is keyed by (user, book).
+- Config (agent/MCP tier): `UPLOADS_BUCKET_NAME`, `KB_CHUNK_BUCKET_NAME`,
+  `KNOWLEDGE_BASE_ID`, `KNOWLEDGE_BASE_DATA_SOURCE_ID`.
+
 ## Tool tier (MCP server)
 
-- Package: `mcp_server/` (server) + `mcp_server/tools/` (implementations).
-- Exposes only allowlisted tools (e.g. GraphRAG retrieve, authorized-content
-  access, concept persistence).
+- Package: `mcp_server/` (FastMCP server) + `mcp_server/tools/`.
+- `TOOL_ALLOWLIST` is the single source of truth for permitted tools.
+- Implemented (ingestion): `get_authorized_content`, `ingest_to_knowledge_base`.
+  GraphRAG retrieval + concept persistence are added with the discussion group.
 - Re-checks authorization on every call; never exposes arbitrary AWS APIs.
 
 ## Book discovery flow (implemented)

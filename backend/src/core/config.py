@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # Reading progress
     progress_table_name: str | None = None
 
+    # GraphRAG / Bedrock Knowledge Base (agent + MCP tier)
+    kb_chunk_bucket_name: str | None = None
+    knowledge_base_id: str | None = None
+    knowledge_base_data_source_id: str | None = None
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

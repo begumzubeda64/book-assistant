@@ -33,3 +33,13 @@ output "progress_table_name" {
   description = "Progress table name (PROGRESS_TABLE_NAME)."
   value       = module.database.progress_table_name
 }
+
+output "knowledge_base_id" {
+  description = "Bedrock Knowledge Base ID (KNOWLEDGE_BASE_ID)."
+  value       = module.ai.knowledge_base_id
+}
+
+output "kb_chunk_bucket_name" {
+  description = "Prepared-chunk bucket name (KB_CHUNK_BUCKET_NAME)."
+  value       = module.ai.kb_chunk_bucket_name
+}

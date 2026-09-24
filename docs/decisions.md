@@ -118,3 +118,53 @@ plain metadata calls. Adding external MCP dependencies would increase the trust
 surface for no product benefit.
 
 **Status.** Accepted.
+
+---
+
+## 2026-09-21 — Agent-tier dependencies isolated from the FastAPI image
+
+**Decision.** LangGraph, `bedrock-agentcore`, `pypdf`, and `mcp` are an
+`agents` optional-dependency group, installed into the agent images and the MCP
+server image but not the FastAPI application image.
+
+**Why.** Keeps the API image lean and reinforces tier isolation (the API never
+imports agent/graph code). The deps are also included in the `dev` group so the
+pipeline is runnable and testable locally.
+
+**Status.** Accepted.
+
+---
+
+## 2026-09-21 — GraphRAG KB provisioned via the `awscc` provider
+
+**Decision.** The Bedrock Knowledge Base with **Neptune Analytics** GraphRAG
+storage (and its S3 data source) is provisioned with the `hashicorp/awscc`
+provider; the Neptune Analytics graph, S3 buckets, and IAM stay on the classic
+`hashicorp/aws` provider.
+
+**Why.** The classic `aws` provider does not yet support the `NEPTUNE_ANALYTICS`
+storage type for `aws_bedrockagent_knowledge_base` (provider issue #41745; even
+at v5.100 the storage sub-blocks are only OpenSearch/Pinecone/RDS/Redis). The
+Cloud Control (`awscc`) provider mirrors the CloudFormation schema and supports
+`neptune_analytics_configuration`, so it can express the required
+GraphRAG-with-Neptune capability today. When the classic provider adds support,
+this can be migrated. Provider pins were bumped (`aws ~> 5.90`, added
+`awscc ~> 1.0`).
+
+**Status.** Accepted.
+
+---
+
+## 2026-09-21 — Ingestion agent built with mockable ports; live Bedrock deferred
+
+**Decision.** The ingestion pipeline (LangGraph graph, deterministic nodes, MCP
+tools) is built and fully unit-tested against `Protocol` ports with fake
+implementations. Real PDF extraction uses `pypdf`; the KB-ingestion tool has the
+real boto3/Bedrock shape but is exercised via a fake in tests. Live Bedrock KB /
+Neptune Analytics ingestion is a deploy-time concern.
+
+**Why.** Approach B (local-first): Bedrock KB and Neptune Analytics have no local
+emulation, so gating implementation on live AWS would stall progress and incur
+cost. Ports keep the pipeline testable and make the mock→real swap localized.
+
+**Status.** Accepted.
