@@ -28,3 +28,8 @@ output "jobs_table_name" {
   description = "Jobs table name (JOBS_TABLE_NAME)."
   value       = module.database.jobs_table_name
 }
+
+output "progress_table_name" {
+  description = "Progress table name (PROGRESS_TABLE_NAME)."
+  value       = module.database.progress_table_name
+}

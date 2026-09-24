@@ -17,7 +17,6 @@ from src.core.middleware import RequestContextMiddleware
         ("get", "/api/v1/reading/r1"),
         ("post", "/api/v1/discussions"),
         ("get", "/api/v1/recommendations"),
-        ("get", "/api/v1/progress/b1"),
     ],
 )
 def test_stub_routes_registered_and_not_implemented(

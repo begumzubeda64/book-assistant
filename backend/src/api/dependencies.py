@@ -26,6 +26,7 @@ from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
 if TYPE_CHECKING:
     from src.services.book_discovery import BookDiscoveryService
     from src.services.jobs import JobService
+    from src.services.progress import ProgressService
     from src.services.uploads import UploadService
 
 # auto_error=False so we can raise our own consistent error envelope.
@@ -187,16 +188,42 @@ def get_upload_service(settings: SettingsDep) -> UploadService:
 
 UploadServiceDep = Annotated["UploadService", Depends(get_upload_service)]
 
+
+def get_progress_service(settings: SettingsDep) -> ProgressService:
+    """Construct the ProgressService; requires a configured progress table."""
+    import boto3
+
+    from src.repositories.progress import DynamoDBProgressRepository
+    from src.services.progress import ProgressService
+
+    if not settings.progress_table_name:
+        raise ServiceUnavailableError("Progress storage is not configured")
+
+    dynamodb = boto3.resource(
+        "dynamodb",
+        region_name=settings.aws_region,
+        endpoint_url=settings.dynamodb_endpoint_url,
+    )
+    repo = DynamoDBProgressRepository(
+        dynamodb.Table(settings.progress_table_name)
+    )
+    return ProgressService(repository=repo)
+
+
+ProgressServiceDep = Annotated["ProgressService", Depends(get_progress_service)]
+
 __all__ = [
     "AuthenticatedUser",
     "BookServiceDep",
     "CurrentUser",
     "JobServiceDep",
+    "ProgressServiceDep",
     "SettingsDep",
     "UploadServiceDep",
     "get_book_discovery_service",
     "get_current_user",
     "get_job_service",
+    "get_progress_service",
     "get_upload_service",
     "get_validator",
 ]

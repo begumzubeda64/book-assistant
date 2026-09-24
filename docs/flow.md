@@ -117,6 +117,26 @@ the model is called only where generation is actually required.
 Idempotency: job creation uses an idempotency key / deterministic identity so
 retries do not produce duplicate expensive results.
 
+## Reading progress flow (implemented)
+
+```
+PUT /api/v1/progress/{book_id} { position, chapter_id, selected_mode, completed } (auth)
+   → progress router (api/v1/progress.py)
+   → ProgressService.save_progress(user_id=<from token>, book_id, update)
+   → DynamoDBProgressRepository.save  (PK user_id, SK book_id — idempotent upsert)
+
+GET /api/v1/progress/{book_id} (auth)
+   → ProgressService.get_progress(user_id, book_id)   (continue-reading entry point)
+   → 404 PROGRESS_NOT_FOUND if none saved
+```
+
+- Progress is inherently self-scoped: the partition key is the token-derived
+  `user_id`, so a user can only ever read/write their own progress (req 1.3).
+- One item per (user, book): `PUT` is an idempotent upsert (req 6.1). Completion
+  state is a `completed` flag (req 6.3).
+- Backend config: `PROGRESS_TABLE_NAME` (Terraform `database` output); endpoint
+  returns 503 if unset.
+
 ## Interactive discussion flow
 
 ```

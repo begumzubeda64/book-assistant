@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     jobs_queue_url: str | None = None
     verify_uploaded_object: bool = False
 
+    # Reading progress
+    progress_table_name: str | None = None
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False
