@@ -41,6 +41,7 @@ dependencies = [
     { name = "boto3" },
     { name = "fastapi" },
     { name = "gunicorn" },
+    { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -51,7 +52,6 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "boto3-stubs", extra = ["dynamodb", "s3", "sqs"] },
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -64,7 +64,7 @@ requires-dist = [
     { name = "boto3-stubs", extras = ["dynamodb", "s3", "sqs"], marker = "extra == 'dev'", specifier = ">=1.34,<2.0" },
     { name = "fastapi", specifier = ">=0.115,<1.0" },
     { name = "gunicorn", specifier = ">=22.0,<24.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1.0" },
+    { name = "httpx", specifier = ">=0.27,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10,<2.0" },
     { name = "pydantic", specifier = ">=2.7,<3.0" },
     { name = "pydantic-settings", specifier = ">=2.3,<3.0" },

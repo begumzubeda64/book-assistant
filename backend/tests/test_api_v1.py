@@ -13,8 +13,6 @@ from src.core.middleware import RequestContextMiddleware
 @pytest.mark.parametrize(
     "method,path",
     [
-        ("get", "/api/v1/books/search?q=dune"),
-        ("get", "/api/v1/books/abc"),
         ("post", "/api/v1/uploads/presign"),
         ("post", "/api/v1/reading/generate"),
         ("get", "/api/v1/reading/r1"),

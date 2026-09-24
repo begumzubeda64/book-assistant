@@ -12,8 +12,9 @@ in every other environment so nothing can accidentally run unauthenticated.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from functools import lru_cache
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -21,6 +22,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from src.core.config import Settings, get_settings
 from src.core.errors import UnauthorizedError
 from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
+
+if TYPE_CHECKING:
+    from src.services.book_discovery import BookDiscoveryService
 
 # auto_error=False so we can raise our own consistent error envelope.
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -84,10 +88,56 @@ async def get_current_user(
 
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
 
+
+async def get_book_discovery_service(
+    settings: SettingsDep,
+) -> AsyncIterator[BookDiscoveryService]:
+    """Build the book discovery service with a request-scoped HTTP client.
+
+    Providers share one httpx client that is closed when the request completes.
+    The cache is DynamoDB when a table is configured, otherwise a no-op (local
+    default), so discovery works without AWS.
+    """
+    import httpx
+
+    from src.integrations.book_providers.google_books import GoogleBooksProvider
+    from src.integrations.book_providers.open_library import OpenLibraryProvider
+    from src.repositories.book_cache import (
+        BookCacheRepository,
+        DynamoDBBookCache,
+        NullBookCache,
+    )
+    from src.services.book_discovery import BookDiscoveryService
+
+    cache: BookCacheRepository
+    if settings.book_cache_table_name:
+        cache = DynamoDBBookCache.from_settings(
+            settings, settings.book_cache_table_name
+        )
+    else:
+        cache = NullBookCache()
+
+    timeout = httpx.Timeout(settings.book_provider_timeout_seconds)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        yield BookDiscoveryService(
+            primary=GoogleBooksProvider(
+                client, api_key=settings.google_books_api_key
+            ),
+            fallback=OpenLibraryProvider(client),
+            cache=cache,
+        )
+
+
+BookServiceDep = Annotated[
+    "BookDiscoveryService", Depends(get_book_discovery_service)
+]
+
 __all__ = [
     "AuthenticatedUser",
+    "BookServiceDep",
     "CurrentUser",
     "SettingsDep",
+    "get_book_discovery_service",
     "get_current_user",
     "get_validator",
 ]

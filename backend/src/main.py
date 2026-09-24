@@ -29,7 +29,13 @@ OPENAPI_TAGS = [
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Application factory."""
+    """Application factory.
+
+    When explicit ``settings`` are provided (tests, alternate configs), the
+    ``get_settings`` dependency is overridden so every part of the app — including
+    the auth dependency — uses the same settings instance.
+    """
+    override_settings = settings is not None
     settings = settings or get_settings()
     configure_logging(settings.log_level)
 
@@ -51,6 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     register_exception_handlers(app)
+
+    if override_settings:
+        app.dependency_overrides[get_settings] = lambda: settings
 
     @app.get("/health", tags=["health"], response_model=HealthResponse)
     async def health() -> HealthResponse:

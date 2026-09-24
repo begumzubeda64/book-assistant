@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     cognito_user_pool_id: str | None = None
     cognito_client_id: str | None = None
 
+    # Book discovery
+    google_books_api_key: str | None = None
+    book_cache_table_name: str | None = None
+    book_provider_timeout_seconds: float = 8.0
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

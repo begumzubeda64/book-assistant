@@ -112,6 +112,28 @@ retries do not produce duplicate expensive results.
   access, concept persistence).
 - Re-checks authorization on every call; never exposes arbitrary AWS APIs.
 
+## Book discovery flow (implemented)
+
+```
+GET /api/v1/books/search?q=... (auth required)
+   → books router (api/v1/books.py)
+   → BookDiscoveryService (services/book_discovery.py)
+       → cache check (repositories/book_cache.py: DynamoDB or Null)
+       → primary provider: Google Books ── on empty/error ──▶ fallback: Open Library
+         (integrations/book_providers/*, normalized to schemas/books.BookMetadata)
+       → warm cache (best-effort)
+   → BookSearchResults
+```
+
+- Providers implement one `BookProvider` protocol and return the normalized
+  `BookMetadata` shape (provider-agnostic).
+- `book_id` is `"<provider>:<source_id>"`; `GET /books/{book_id}` routes to the
+  matching provider (or the cache).
+- Original reading time is estimated from word/page count at a default WPM,
+  shown separately from adaptive reading time (requirement 4.1 / product.md).
+- Discovery links are display-only; the underlying book is never ingested from
+  them (requirement 2.4). Cache failures never fail a discovery request.
+
 ## Local development
 
 Local-first (Approach B): the application tier runs against DynamoDB Local and
