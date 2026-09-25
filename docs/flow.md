@@ -137,15 +137,31 @@ GET /api/v1/progress/{book_id} (auth)
 - Backend config: `PROGRESS_TABLE_NAME` (Terraform `database` output); endpoint
   returns 503 if unset.
 
-## Interactive discussion flow
+## Discussion flow (implemented — agent tier, invoked directly)
+
+Unlike ingestion/reading (async, SQS), the discussion agent is invoked directly
+for short interactive turns (design.md).
 
 ```
-1. Frontend posts a question (POST /api/v1/discussions/{id}/messages)
-2. Router → service loads conversation context, authorizes the book access
-3. service invokes the discussion agent directly (AgentCore)
-4. agent runs GraphRAG retrieval via the MCP tool server → Bedrock generation
-5. grounded answer + source references returned; message persisted in DynamoDB
+POST /api/v1/discussions { book_id }               → create conversation (DynamoDB, user-scoped)
+POST /api/v1/discussions/{id}/messages { question } (auth)
+  → DiscussionService.post_message
+      → load conversation (ownership-checked) + prior turns as context
+      → DiscussionAgent.answer (LangGraph, invoked directly):
+          retrieve (MCP graphrag_retrieve → Bedrock KB, filtered to user_id+book_id)
+          → generate (MCP generate_text, grounded prompt: answer ONLY from sources)
+          → citations (derived from retrieved passages — never fabricated)
+      → persist user question + assistant answer (+citations) to DynamoDB
+  → grounded MessageResponse with source references
+GET /api/v1/discussions/{id} → ConversationResponse (user-scoped)
 ```
+
+- Retrieval is scoped to `user_id` + `book_id`, so a user never sees another
+  user's book or graph context (security.md). Cross-chapter questions work
+  because GraphRAG connects concepts across the book.
+- Citations come only from retrieved passages; if no sources are found the
+  answer says so rather than inventing facts.
+- Config: `CONVERSATIONS_TABLE_NAME`, `KNOWLEDGE_BASE_ID`, `GENERATION_MODEL_ID`.
 
 ## Ingestion pipeline (implemented — agent tier)
 
@@ -207,8 +223,8 @@ GET /api/v1/reading/{reading_id} → S3ReadingResultRepository (user-scoped) →
 - Package: `mcp_server/` (FastMCP server) + `mcp_server/tools/`.
 - `TOOL_ALLOWLIST` is the single source of truth for permitted tools.
 - Implemented: `get_authorized_content`, `ingest_to_knowledge_base`,
-  `get_book_content`, `generate_text`, `store_reading_result`. GraphRAG
-  retrieval + concept persistence are added with the discussion group.
+  `get_book_content`, `generate_text`, `store_reading_result`,
+  `graphrag_retrieve`. Concept persistence is added with the recommendations group.
 - `generate_text` is the single model-calling capability; agents never invoke
   Bedrock directly.
 - Re-checks authorization on every call; never exposes arbitrary AWS APIs.

@@ -20,6 +20,7 @@ from typing import Any
 
 from src.agents.shared.ports import (
     BookContentPort,
+    GraphRAGRetrievalPort,
     ReadingStorePort,
     TextGenerationPort,
 )
@@ -36,6 +37,7 @@ TOOL_ALLOWLIST = frozenset(
         "get_book_content",
         "generate_text",
         "store_reading_result",
+        "graphrag_retrieve",
     }
 )
 
@@ -130,3 +132,19 @@ def register_reading_tools(
         return reading_store.store_reading(
             user_id=user_id, reading_id=reading_id, payload=payload
         )
+
+
+def register_discussion_tools(
+    server: Any, *, retriever: GraphRAGRetrievalPort
+) -> None:
+    """Register the GraphRAG discussion tools on an existing MCP server."""
+
+    @server.tool(name="graphrag_retrieve")
+    def graphrag_retrieve(
+        user_id: str, book_id: str, query: str, top_k: int = 8
+    ) -> list[dict[str, Any]]:
+        """Retrieve passages relevant to the query (user-scoped)."""
+        passages = retriever.retrieve(
+            user_id=user_id, book_id=book_id, query=query, top_k=top_k
+        )
+        return [p.model_dump() for p in passages]

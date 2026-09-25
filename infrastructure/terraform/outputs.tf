@@ -48,3 +48,8 @@ output "reading_results_bucket_name" {
   description = "Reading-results bucket name (READING_RESULTS_BUCKET_NAME)."
   value       = module.storage.reading_results_bucket_name
 }
+
+output "conversations_table_name" {
+  description = "Conversations table name (CONVERSATIONS_TABLE_NAME)."
+  value       = module.database.conversations_table_name
+}

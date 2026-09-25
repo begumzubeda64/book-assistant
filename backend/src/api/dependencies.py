@@ -26,6 +26,7 @@ from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
 if TYPE_CHECKING:
     from src.repositories.reading_results import ReadingResultRepository
     from src.services.book_discovery import BookDiscoveryService
+    from src.services.discussions import DiscussionService
     from src.services.jobs import JobService
     from src.services.progress import ProgressService
     from src.services.uploads import UploadService
@@ -231,10 +232,58 @@ ReadingResultRepoDep = Annotated[
     "ReadingResultRepository", Depends(get_reading_result_repository)
 ]
 
+
+def get_discussion_service(settings: SettingsDep) -> DiscussionService:
+    """Build the DiscussionService (conversation repo + discussion agent).
+
+    The discussion agent is invoked directly for interactive turns. Its
+    GraphRAG-retrieval and text-generation capabilities require the Knowledge
+    Base and Bedrock to be configured.
+    """
+    import boto3
+
+    from src.agents.discussion.agent import DiscussionAgent
+    from src.mcp_server.tools.generation import TextGenerationTool
+    from src.mcp_server.tools.graphrag import GraphRAGRetrievalTool
+    from src.repositories.conversations import DynamoDBConversationRepository
+    from src.services.discussions import DiscussionService
+
+    if not settings.conversations_table_name:
+        raise ServiceUnavailableError("Discussions are not configured")
+    if not settings.knowledge_base_id:
+        raise ServiceUnavailableError("GraphRAG is not configured")
+
+    dynamodb = boto3.resource(
+        "dynamodb",
+        region_name=settings.aws_region,
+        endpoint_url=settings.dynamodb_endpoint_url,
+    )
+    repo = DynamoDBConversationRepository(
+        dynamodb.Table(settings.conversations_table_name)
+    )
+
+    agent_runtime = boto3.client(
+        "bedrock-agent-runtime", region_name=settings.aws_region
+    )
+    bedrock_runtime = boto3.client(
+        "bedrock-runtime", region_name=settings.aws_region
+    )
+    retriever = GraphRAGRetrievalTool(agent_runtime, settings.knowledge_base_id)
+    generator = TextGenerationTool(bedrock_runtime, settings.generation_model_id)
+
+    agent = DiscussionAgent(retriever=retriever, generator=generator)
+    return DiscussionService(repository=repo, agent=agent)
+
+
+DiscussionServiceDep = Annotated[
+    "DiscussionService", Depends(get_discussion_service)
+]
+
 __all__ = [
     "AuthenticatedUser",
     "BookServiceDep",
     "CurrentUser",
+    "DiscussionServiceDep",
     "JobServiceDep",
     "ProgressServiceDep",
     "ReadingResultRepoDep",
@@ -242,6 +291,7 @@ __all__ = [
     "UploadServiceDep",
     "get_book_discovery_service",
     "get_current_user",
+    "get_discussion_service",
     "get_job_service",
     "get_progress_service",
     "get_reading_result_repository",
