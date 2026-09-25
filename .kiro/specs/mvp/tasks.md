@@ -101,12 +101,13 @@ turn precede frontend integration, hardening, CI/CD, and validation.
   - [ ] 11.4 Add explanation metadata and recommendation tests.
   - _Requirements: 7.1, 7.2_
 
-- [ ] 12. Frontend product experience
-  - [ ] 12.1 Build authentication, discovery/search, and book details screens.
-  - [ ] 12.2 Build the authorized PDF upload flow and reading configuration UI.
-  - [ ] 12.3 Build the adaptive reading result page and async job progress/status UI.
-  - [ ] 12.4 Build the discussion UI, continue-reading UI, and recommendations UI.
-  - [ ] 12.5 Clearly display original vs selected reading time; add loading, empty, error, and retry states.
+- [x] 12. Frontend product experience
+  - [x] 12.1 Build authentication, discovery/search, and book details screens.
+  - [x] 12.2 Build the authorized PDF upload flow and reading configuration UI.
+  - [x] 12.3 Build the adaptive reading result page and async job progress/status UI.
+  - [x] 12.4 Build the discussion UI, continue-reading UI, and recommendations UI.
+        (Recommendations UI is a "coming soon" stub until group 11 lands.)
+  - [x] 12.5 Clearly display original vs selected reading time; add loading, empty, error, and retry states.
   - _Requirements: 2.2, 3.1, 4.1, 4.2, 4.3, 4.4, 5.1, 5.5, 6.2, 7.1_
 
 - [ ] 13. Security and observability

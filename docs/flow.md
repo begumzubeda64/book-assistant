@@ -251,6 +251,40 @@ GET /api/v1/books/search?q=... (auth required)
 - Discovery links are display-only; the underlying book is never ingested from
   them (requirement 2.4). Cache failures never fail a discovery request.
 
+## Frontend (implemented — group 12)
+
+React + TypeScript + Vite + Tailwind, built against the stable backend API
+contracts. Local-dev-first auth: `VITE_AUTH_MODE=local` (default) treats the
+session as a dev user and relies on the backend's local auth bypass (no token);
+the real Cognito path is scaffolded behind `VITE_AUTH_MODE=cognito`.
+
+```
+src/
+  app/            App (ErrorBoundary → AuthProvider → RouterProvider), router
+  components/     Layout, ProtectedRoute, states (Spinner/Error/Empty),
+                  ErrorBoundary, NotFoundPage
+  features/
+    auth/         AuthProvider + useAuth (token provider registered on api client)
+    books/        DiscoverPage (search), BookDetailPage, BookCard
+    reading/      LibraryPage + UploadBook + LibraryBookRow (progress),
+                  ReadingConfigPage (3/5/10 · mode · focus), ReadingPage (result)
+    discussion/   DiscussionStartPage, DiscussionPage (grounded chat + citations)
+    recommendations/ RecommendationsPage (coming-soon until group 11)
+  services/       Typed clients per domain over apiFetch (auto bearer / bypass)
+  types/          TS mirrors of the backend Pydantic schemas
+  stores/         uploadedBooks (localStorage registry — no list-my-books API)
+```
+
+User journey wired end to end: sign in → discover/search → upload authorized PDF
+(presign → direct-to-S3 → ingest → job progress) → configure & generate adaptive
+reading (job polling) → read result with source refs → discuss (GraphRAG chat) →
+progress saved → continue reading. Async work uses `pollJob`; the PDF uploads
+directly to S3, never through the API. All screens use shared loading/empty/
+error/retry states.
+
+Note: real end-to-end runtime needs the backend running with configured AWS
+(uploads/jobs/KB/etc.); the UI builds, boots, and is contract-correct now.
+
 ## Local development
 
 Local-first (Approach B): the application tier runs against DynamoDB Local and
@@ -275,10 +309,12 @@ Implemented and tested (backend, local-first):
 - Reading progress.
 - Terraform: cognito, storage, messaging, database, ai (GraphRAG) modules.
 
+Implemented (frontend):
+- **Frontend (group 12)** — React app: auth (local-dev bypass), discovery,
+  upload flow, adaptive reading, discussion chat, progress/continue-reading;
+  recommendations screen stubbed until group 11.
+
 In progress / remaining:
-- **Frontend (group 12)** — being built now against the stable API contracts;
-  the recommendations screen is stubbed until group 11 lands (reorder — see
-  `docs/decisions.md`).
 - **Recommendations (group 11)** — transparent scoring endpoint, no agent.
 - Hardening (13), CI/CD (14), e2e validation (15), portfolio (16).
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.
