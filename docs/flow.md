@@ -264,8 +264,21 @@ frontend: npm run dev (proxies /api and /health to the backend)
 
 ## Current status
 
-Milestone 1 (foundation) is in place: FastAPI app with `/health`, the `/api/v1`
-router surface as stubs, the auth dependency seam, Docker images, the frontend
-scaffold, and the Terraform skeleton. Agent packages, the MCP server, and real
-AWS resources are implemented in later task groups (see
-`.kiro/specs/mvp/tasks.md`).
+Implemented and tested (backend, local-first):
+- Foundation: FastAPI app, `/health`, request-ID middleware, error envelope.
+- Auth: Cognito JWT validation + ownership authorization.
+- Book discovery (Google Books + Open Library).
+- Authorized upload + async job model/queue/status.
+- Ingestion agent + GraphRAG KB (MCP tools).
+- Adaptive-reading agent (3/5/10-minute pipeline).
+- Discussion agent (GraphRAG, grounded answers) + conversation persistence.
+- Reading progress.
+- Terraform: cognito, storage, messaging, database, ai (GraphRAG) modules.
+
+In progress / remaining:
+- **Frontend (group 12)** — being built now against the stable API contracts;
+  the recommendations screen is stubbed until group 11 lands (reorder — see
+  `docs/decisions.md`).
+- **Recommendations (group 11)** — transparent scoring endpoint, no agent.
+- Hardening (13), CI/CD (14), e2e validation (15), portfolio (16).
+- Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.

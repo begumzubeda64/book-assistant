@@ -18,6 +18,18 @@ Follow this order:
 
 Kiro should not introduce a new AWS service, framework, database, library, or architectural pattern without a concrete requirement.
 
+## Frontend sequencing
+
+The frontend (spec group 12) is built once the feature-backend **API contracts**
+it consumes are stable (auth, books, uploads, reading, discussions, jobs,
+progress) — not strictly after every backend feature. A backend feature that the
+frontend does not yet need (e.g. recommendations) may land in parallel; the
+frontend stubs that screen until the endpoint exists. Build the frontend against
+the real API contracts (Pydantic schemas / OpenAPI), and keep the
+`services/`-layer client as the single integration seam so contract changes are
+localized. (See the reorder note in `.kiro/specs/mvp/tasks.md` and
+`docs/decisions.md`.)
+
 ## Kiro Collaboration and change protocol
 
 These rules apply to all development work (Vibe and Spec):

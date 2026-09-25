@@ -168,3 +168,23 @@ emulation, so gating implementation on live AWS would stall progress and incur
 cost. Ports keep the pipeline testable and make the mock→real swap localized.
 
 **Status.** Accepted.
+
+---
+
+## 2026-09-21 — Frontend (group 12) moved ahead of recommendations (group 11)
+
+**Decision.** Build the frontend once the feature-backend API contracts are
+stable (auth, books, uploads, reading, discussions, jobs, progress), rather than
+waiting for every backend feature. Recommendations (group 11) — a single scored
+endpoint with no agent — is decoupled from the frontend and runs in
+parallel/after; the frontend stubs the recommendations screen until it lands.
+The spec wave graph and `development.md` were updated to match.
+
+**Why.** After groups 5–10 the API surface is stable and real, so there is no
+benefit to deferring the frontend further. Building it now yields a tangible,
+interactive product and surfaces contract gaps earlier. Recommendations does not
+block any other frontend screen, so it need not gate the frontend. Hardening
+(group 13) now waits on both 11 and 12. Tradeoff accepted: the recommendations
+screen is a stub for a short window.
+
+**Status.** Accepted.

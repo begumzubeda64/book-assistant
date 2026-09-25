@@ -154,15 +154,23 @@ each other and can run concurrently.
     { "wave": 4, "tasks": ["5", "6", "10"], "dependsOn": ["4"] },
     { "wave": 5, "tasks": ["7"], "dependsOn": ["6"] },
     { "wave": 6, "tasks": ["8", "9"], "dependsOn": ["7"] },
-    { "wave": 7, "tasks": ["11"], "dependsOn": ["5", "10"] },
-    { "wave": 8, "tasks": ["12"], "dependsOn": ["5", "6", "8", "9", "10", "11"] },
-    { "wave": 9, "tasks": ["13"], "dependsOn": ["12"] },
+    { "wave": 7, "tasks": ["12"], "dependsOn": ["5", "6", "8", "9", "10"] },
+    { "wave": 8, "tasks": ["11"], "dependsOn": ["5", "10"] },
+    { "wave": 9, "tasks": ["13"], "dependsOn": ["11", "12"] },
     { "wave": 10, "tasks": ["14"], "dependsOn": ["13"] },
     { "wave": 11, "tasks": ["15"], "dependsOn": ["14"] },
     { "wave": 12, "tasks": ["16"], "dependsOn": ["15"] }
   ]
 }
 ```
+
+> **Reorder note (2026-09-21):** the frontend (group 12) was moved ahead of
+> recommendations (group 11). Once the feature-backend API contracts (groups 5,
+> 6, 8, 9, 10) are stable, the frontend no longer needs to wait on
+> recommendations; group 12 builds against the stable contracts and stubs the
+> recommendations screen until group 11 lands. Group 11 (a single scored
+> endpoint, no agent) then slots in alongside/after the frontend, and hardening
+> (group 13) waits on both. See `docs/decisions.md`.
 
 ```text
 1  Repository foundation
@@ -190,10 +198,10 @@ each other and can run concurrently.
         │              │               │                │
         └──────────────┴───────────────┴────────────────┤
                                                          ▼
-                                              11  Recommendations
-                                                         │
-                                                         ▼
                                               12  Frontend experience
+                                                         │
+                                              11  Recommendations
+                                              (in parallel; frontend stubs it)
                                                          │
                                                          ▼
                                               13  Security & observability
@@ -214,8 +222,13 @@ Key dependencies:
 - **6 → 7**: a book must be uploaded before it can be ingested.
 - **7 → 8, 9**: ingestion (content + GraphRAG graph) must exist before adaptive
   reading generation and GraphRAG discussion.
-- **5–11 → 12**: backend features precede their frontend integration.
-- **12 → 13 → 14 → 15**: hardening, CI/CD, then end-to-end validation.
+- **5, 6, 8, 9, 10 → 12**: the feature-backend contracts precede their frontend
+  integration. The frontend does **not** depend on recommendations (11); it
+  stubs that screen until 11 lands (reorder 2026-09-21).
+- **5, 10 → 11**: recommendations scores over discovery/progress signals; it can
+  run in parallel with the frontend.
+- **11, 12 → 13 → 14 → 15**: hardening waits on both the frontend and
+  recommendations, then CI/CD, then end-to-end validation.
 
 ## Notes
 
