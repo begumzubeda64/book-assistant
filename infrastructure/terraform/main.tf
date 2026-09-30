@@ -70,7 +70,7 @@ module "ai" {
   name_prefix = local.name_prefix
 }
 #
-# module "observability" {
-#   source      = "./modules/observability"
-#   name_prefix = local.name_prefix
-# }
+module "observability" {
+  source      = "./modules/observability"
+  name_prefix = local.name_prefix
+}

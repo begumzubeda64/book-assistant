@@ -320,6 +320,13 @@ Also implemented:
   provider is a minimal stub until a reading-history store exists (see
   `docs/decisions.md`).
 
+Also implemented:
+- **Hardening (group 13)** — per-user AI rate limiting on expensive endpoints
+  (reading generate, discussion message), safe-logging guard tests, observability
+  Terraform module (CloudWatch log groups, app-error + job-failure metric
+  filters, ALB 5xx alarm, SNS topic), and a security audit in
+  `infrastructure/SECURITY.md`.
+
 Remaining:
-- Hardening (13), CI/CD (14), e2e validation (15), portfolio (16).
+- CI/CD (14), e2e validation (15), portfolio (16).
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.

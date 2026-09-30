@@ -12,7 +12,7 @@ in every other environment so nothing can accidentally run unauthenticated.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated
 
@@ -24,6 +24,7 @@ from src.core.errors import ServiceUnavailableError, UnauthorizedError
 from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
 
 if TYPE_CHECKING:
+    from src.core.rate_limit import RateLimiter
     from src.repositories.reading_results import ReadingResultRepository
     from src.services.book_discovery import BookDiscoveryService
     from src.services.discussions import DiscussionService
@@ -335,6 +336,39 @@ async def get_recommendation_service(
 RecommendationServiceDep = Annotated[
     "RecommendationService", Depends(get_recommendation_service)
 ]
+
+
+@lru_cache
+def _shared_rate_limiter(limit: int, window: float) -> RateLimiter:
+    from src.core.rate_limit import InMemoryRateLimiter
+
+    return InMemoryRateLimiter(limit=limit, window_seconds=window)
+
+
+def enforce_ai_rate_limit(
+    operation: str,
+) -> Callable[..., Awaitable[None]]:
+    """Build a dependency that rate-limits an expensive AI operation per user.
+
+    Cost-abuse protection (security.md): caps expensive generation calls per
+    user per window, failing with 429 when exceeded.
+    """
+    from src.core.errors import TooManyRequestsError
+
+    async def _dependency(
+        user: AuthenticatedUser = Depends(get_current_user),
+        settings: Settings = Depends(get_settings),
+    ) -> None:
+        limiter = _shared_rate_limiter(
+            settings.ai_rate_limit_max, settings.ai_rate_limit_window_seconds
+        )
+        if not limiter.check(user.user_id, operation):
+            raise TooManyRequestsError(
+                "AI request limit reached; please try again shortly"
+            )
+
+    return _dependency
+
 
 __all__ = [
     "AuthenticatedUser",

@@ -111,11 +111,12 @@ turn precede frontend integration, hardening, CI/CD, and validation.
   - [x] 12.5 Clearly display original vs selected reading time; add loading, empty, error, and retry states.
   - _Requirements: 2.2, 3.1, 4.1, 4.2, 4.3, 4.4, 5.1, 5.5, 6.2, 7.1_
 
-- [ ] 13. Security and observability
-  - [ ] 13.1 Review IAM policies for least privilege; confirm ECS tasks have no public IPs and S3 public access is blocked.
-  - [ ] 13.2 Confirm secrets are not in source/image/environment files.
-  - [ ] 13.3 Add CloudWatch alarms for ECS/ALB failures, application error metrics, and async job failure metrics.
-  - [ ] 13.4 Add safe structured logging and AI cost-abuse protections.
+- [x] 13. Security and observability
+  - [x] 13.1 Review IAM policies for least privilege; confirm ECS tasks have no public IPs and S3 public access is blocked.
+        (S3 blocks + KB IAM enforced now; ECS no-public-IP + per-tier roles deferred to the ECS/networking provisioning group — see `infrastructure/SECURITY.md`.)
+  - [x] 13.2 Confirm secrets are not in source/image/environment files.
+  - [x] 13.3 Add CloudWatch alarms for ECS/ALB failures, application error metrics, and async job failure metrics.
+  - [x] 13.4 Add safe structured logging and AI cost-abuse protections.
   - _Requirements: 9.1, 9.2, 9.4, 9.5, 8.3_
 
 - [ ] 14. CI/CD

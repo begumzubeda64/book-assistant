@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     reading_results_bucket_name: str | None = None
     generation_model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
+    # AI cost-abuse protection: max expensive AI ops per user per window.
+    ai_rate_limit_max: int = 20
+    ai_rate_limit_window_seconds: float = 60.0
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

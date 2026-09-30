@@ -73,6 +73,12 @@ class ServiceUnavailableError(AppError):
     message = "The service is temporarily unavailable"
 
 
+class TooManyRequestsError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "RATE_LIMITED"
+    message = "Too many requests; please slow down"
+
+
 def _error_body(code: str, message: str, request_id: str | None) -> dict[str, object]:
     return {"error": {"code": code, "message": message, "request_id": request_id}}
 

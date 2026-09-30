@@ -214,3 +214,25 @@ change that does not touch the scoring formula. The frontend handles the empty
 state gracefully.
 
 **Status.** Accepted.
+
+---
+
+## 2026-09-21 — AI cost-abuse protection: per-user in-memory rate limiting
+
+**Decision.** Expensive AI endpoints (`POST /reading/generate`,
+`POST /discussions/{id}/messages`) are guarded by a per-user, per-operation
+sliding-window rate limiter (`core/rate_limit.py`), enforced via a FastAPI
+dependency that returns 429 when exceeded. The default implementation is
+in-memory behind a `RateLimiter` protocol.
+
+**Why.** `security.md` requires request limits on expensive AI operations. A
+small protocol-backed limiter is enough for the MVP and keeps call sites stable.
+Job idempotency already prevents duplicate expensive *work*; this caps request
+*rate*.
+
+**Limitation.** In-memory state is per-task, so with multiple ECS tasks the
+effective limit is per-task, not global. The protocol lets it be swapped for a
+shared store (DynamoDB/Redis) when horizontal scaling makes that necessary,
+without changing endpoints.
+
+**Status.** Accepted.

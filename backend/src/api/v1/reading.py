@@ -9,12 +9,13 @@ job_id immediately (requirement 4.7). The reading_id equals the job_id.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
 from src.api.dependencies import (
     CurrentUser,
     JobServiceDep,
     ReadingResultRepoDep,
+    enforce_ai_rate_limit,
 )
 from src.core.errors import NotFoundError, ValidationAppError
 from src.models.job import JobType
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/reading", tags=["reading"])
     "/generate",
     response_model=JobCreatedResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(enforce_ai_rate_limit("reading_generate"))],
 )
 async def generate_reading(
     user: CurrentUser,

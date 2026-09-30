@@ -10,9 +10,13 @@ references. Conversations are scoped to the authenticated user (requirement 1.3)
 
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
-from src.api.dependencies import CurrentUser, DiscussionServiceDep
+from src.api.dependencies import (
+    CurrentUser,
+    DiscussionServiceDep,
+    enforce_ai_rate_limit,
+)
 from src.schemas.discussions import (
     ConversationCreatedResponse,
     ConversationResponse,
@@ -46,6 +50,7 @@ async def create_discussion(
     "/{conversation_id}/messages",
     response_model=MessageResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(enforce_ai_rate_limit("discussion_message"))],
 )
 async def post_message(
     user: CurrentUser,
