@@ -327,6 +327,13 @@ Also implemented:
   filters, ALB 5xx alarm, SNS topic), and a security audit in
   `infrastructure/SECURITY.md`.
 
+Also implemented:
+- **CI/CD (group 14)** — GitHub Actions: `ci.yml` (backend ruff/mypy/pytest,
+  frontend lint/build, terraform fmt/validate), `build.yml` (5 images + Trivy
+  scan + OIDC ECR push), `deploy.yml` (terraform plan + ECS rolling deploy,
+  `prod` gated by a GitHub Environment). AWS steps gated on `AWS_ROLE_ARN` so CI
+  is green pre-AWS. See `.github/workflows/README.md`.
+
 Remaining:
-- CI/CD (14), e2e validation (15), portfolio (16).
+- e2e validation (15, needs real AWS), portfolio (16).
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.

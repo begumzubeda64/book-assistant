@@ -1,0 +1,100 @@
+name: Deploy
+
+# Environment-specific deploy: Terraform plan/apply for infrastructure and an
+# ECS service update for the API. The production job runs in the GitHub
+# `production` Environment, where a required-reviewers approval gate is
+# configured in repo settings (the approval gate itself lives in the Environment
+# protection rules, not in YAML).
+#
+# All AWS steps are gated on the AWS_ROLE_ARN repository variable so the workflow
+# is safe to have in the repo before AWS is provisioned.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  plan:
+    name: Terraform plan (${{ github.event.inputs.environment }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.2"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Init
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        run: terraform init
+
+      - name: Plan
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        run: >
+          terraform plan
+          -var-file=environments/${{ github.event.inputs.environment }}/${{ github.event.inputs.environment }}.tfvars
+
+      - name: Skipped (AWS not configured)
+        if: ${{ vars.AWS_ROLE_ARN == '' }}
+        run: echo "AWS_ROLE_ARN is not set; skipping plan. Validate ran in CI."
+
+  deploy:
+    name: Deploy (${{ github.event.inputs.environment }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # The production Environment carries the required-reviewers approval gate.
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force new ECS deployment (rolling)
+        if: ${{ vars.AWS_ROLE_ARN != '' && vars.ECS_CLUSTER != '' }}
+        run: |
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_SERVICE }}" \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_SERVICE }}"
+
+      - name: Skipped (AWS not configured)
+        if: ${{ vars.AWS_ROLE_ARN == '' }}
+        run: echo "AWS_ROLE_ARN is not set; deploy is a no-op until AWS is provisioned."

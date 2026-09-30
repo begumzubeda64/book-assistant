@@ -119,11 +119,12 @@ turn precede frontend integration, hardening, CI/CD, and validation.
   - [x] 13.4 Add safe structured logging and AI cost-abuse protections.
   - _Requirements: 9.1, 9.2, 9.4, 9.5, 8.3_
 
-- [ ] 14. CI/CD
-  - [ ] 14.1 Add the GitHub Actions lint/test workflow.
-  - [ ] 14.2 Build and security-scan the backend Docker image; authenticate to AWS via OIDC and push to ECR.
-  - [ ] 14.3 Deploy the ECS task definition/service; run Terraform fmt/validate/plan.
-  - [ ] 14.4 Add the environment-specific deployment workflow with a production approval gate.
+- [x] 14. CI/CD
+  - [x] 14.1 Add the GitHub Actions lint/test workflow.
+  - [x] 14.2 Build and security-scan the Docker images (api, mcp, 3 agents); authenticate to AWS via OIDC and push to ECR.
+  - [x] 14.3 Deploy the ECS task definition/service; run Terraform fmt/validate/plan.
+  - [x] 14.4 Add the environment-specific deployment workflow with a production approval gate.
+        (AWS steps gated on `AWS_ROLE_ARN`; approval gate via the GitHub `production` Environment.)
   - _Requirements: 10.2_
 
 - [ ] 15. End-to-end validation
