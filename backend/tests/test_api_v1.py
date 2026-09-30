@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from src.api.dependencies import CurrentUser
 from src.core.errors import register_exception_handlers
 from src.core.middleware import RequestContextMiddleware
 
-
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("get", "/api/v1/recommendations"),
-    ],
-)
-def test_stub_routes_registered_and_not_implemented(
-    client: TestClient, method: str, path: str
-) -> None:
-    response = getattr(client, method)(path)
-    # Routes exist (not 404) and are declared placeholders (501).
-    assert response.status_code == 501
+# All API v1 routes are now implemented (no 501 stubs remain). The tests below
+# cover the shared auth-dependency behavior applied across those routes.
 
 
 def test_protected_route_without_token_fails_closed() -> None:

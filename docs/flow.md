@@ -311,10 +311,15 @@ Implemented and tested (backend, local-first):
 
 Implemented (frontend):
 - **Frontend (group 12)** — React app: auth (local-dev bypass), discovery,
-  upload flow, adaptive reading, discussion chat, progress/continue-reading;
-  recommendations screen stubbed until group 11.
+  upload flow, adaptive reading, discussion chat, progress/continue-reading,
+  recommendations.
 
-In progress / remaining:
-- **Recommendations (group 11)** — transparent scoring endpoint, no agent.
+Also implemented:
+- **Recommendations (group 11)** — transparent additive scoring endpoint
+  (`GET /api/v1/recommendations`), no agent; each item carries a reason. Signals
+  provider is a minimal stub until a reading-history store exists (see
+  `docs/decisions.md`).
+
+Remaining:
 - Hardening (13), CI/CD (14), e2e validation (15), portfolio (16).
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.

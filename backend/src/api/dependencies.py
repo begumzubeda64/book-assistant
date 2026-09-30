@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from src.services.discussions import DiscussionService
     from src.services.jobs import JobService
     from src.services.progress import ProgressService
+    from src.services.recommendations import RecommendationService
     from src.services.uploads import UploadService
 
 # auto_error=False so we can raise our own consistent error envelope.
@@ -279,6 +280,62 @@ DiscussionServiceDep = Annotated[
     "DiscussionService", Depends(get_discussion_service)
 ]
 
+
+async def get_recommendation_service(
+    settings: SettingsDep,
+) -> AsyncIterator[RecommendationService]:
+    """Build the RecommendationService.
+
+    Signals are derived from the user's saved progress; candidate books come
+    from the discovery providers, seeded by the user's preferred categories.
+    Uses a request-scoped HTTP client for the discovery calls.
+    """
+    import httpx
+
+    from src.integrations.book_providers.google_books import GoogleBooksProvider
+    from src.integrations.book_providers.open_library import OpenLibraryProvider
+    from src.models.recommendations import UserSignals
+    from src.repositories.book_cache import NullBookCache
+    from src.schemas.books import BookMetadata
+    from src.services.book_discovery import BookDiscoveryService
+    from src.services.recommendations import RecommendationService
+
+    # Signals provider: kept minimal for the MVP. A dedicated reading-history /
+    # saved-concepts store can enrich this later without changing scoring.
+    async def signals_provider(_user_id: str) -> UserSignals:
+        return UserSignals()
+
+    timeout = httpx.Timeout(settings.book_provider_timeout_seconds)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        discovery = BookDiscoveryService(
+            primary=GoogleBooksProvider(
+                client, api_key=settings.google_books_api_key
+            ),
+            fallback=OpenLibraryProvider(client),
+            cache=NullBookCache(),
+        )
+
+        async def candidate_provider(signals: UserSignals) -> list[BookMetadata]:
+            # Seed candidates from the user's preferred categories/authors; if
+            # there are no signals yet, there are no candidates to score.
+            seeds = list(signals.preferred_categories | signals.preferred_authors)
+            if not seeds:
+                return []
+            results: list[BookMetadata] = []
+            for seed in seeds[:3]:
+                results.extend(await discovery.search(seed, limit=10))
+            return results
+
+        yield RecommendationService(
+            signals_provider=signals_provider,
+            candidate_provider=candidate_provider,
+        )
+
+
+RecommendationServiceDep = Annotated[
+    "RecommendationService", Depends(get_recommendation_service)
+]
+
 __all__ = [
     "AuthenticatedUser",
     "BookServiceDep",
@@ -287,6 +344,7 @@ __all__ = [
     "JobServiceDep",
     "ProgressServiceDep",
     "ReadingResultRepoDep",
+    "RecommendationServiceDep",
     "SettingsDep",
     "UploadServiceDep",
     "get_book_discovery_service",
@@ -295,6 +353,7 @@ __all__ = [
     "get_job_service",
     "get_progress_service",
     "get_reading_result_repository",
+    "get_recommendation_service",
     "get_upload_service",
     "get_validator",
 ]

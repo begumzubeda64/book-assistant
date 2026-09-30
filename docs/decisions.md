@@ -188,3 +188,29 @@ block any other frontend screen, so it need not gate the frontend. Hardening
 screen is a stub for a short window.
 
 **Status.** Accepted.
+
+---
+
+## 2026-09-21 — Recommendations: transparent additive scoring, no learned model
+
+**Decision.** Recommendations use a simple, documented, additive scoring formula
+(`services/recommendation_scoring.py`): weighted category overlap + author match
++ capped saved-concept overlap, each producing a human-readable reason. No agent,
+no learned recommender model. Candidate books come from the discovery providers
+seeded by the user's preferred categories/authors; already started/completed
+books are excluded and zero-score items are dropped.
+
+**Why.** `development.md` calls for transparent, testable scoring over available
+signals rather than a complex model for the MVP. Additive weights (module
+constants) keep it explainable and unit-testable, and every recommendation
+carries a reason (requirement 7.2).
+
+**MVP limitation (honest).** There is no dedicated reading-history / saved-
+concepts store yet, so the signals provider currently returns empty signals
+server-side, which means the endpoint returns an empty list until that data
+exists. The scoring and service are fully implemented and tested; enriching the
+signals provider (from progress + a saved-concepts store) is a localized future
+change that does not touch the scoring formula. The frontend handles the empty
+state gracefully.
+
+**Status.** Accepted.

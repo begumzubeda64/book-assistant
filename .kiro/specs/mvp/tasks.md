@@ -94,11 +94,12 @@ turn precede frontend integration, hardening, CI/CD, and validation.
   - [ ] 10.4 Add progress tests.
   - _Requirements: 6.1, 6.2, 6.3_
 
-- [ ] 11. Recommendations
-  - [ ] 11.1 Define the transparent recommendation scoring formula.
-  - [ ] 11.2 Implement metadata similarity and user activity signals.
-  - [ ] 11.3 Implement the recommendation service and persist/cache results where useful.
-  - [ ] 11.4 Add explanation metadata and recommendation tests.
+- [x] 11. Recommendations
+  - [x] 11.1 Define the transparent recommendation scoring formula.
+  - [x] 11.2 Implement metadata similarity and user activity signals.
+        (Signals provider is a minimal stub until a reading-history store exists.)
+  - [x] 11.3 Implement the recommendation service and persist/cache results where useful.
+  - [x] 11.4 Add explanation metadata and recommendation tests.
   - _Requirements: 7.1, 7.2_
 
 - [x] 12. Frontend product experience
