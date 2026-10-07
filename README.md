@@ -55,6 +55,7 @@ Region: **`eu-central-1` (Europe, Frankfurt)**. Full detail in
 - [docs/decisions.md](docs/decisions.md) — key decisions and rationale
 - [docs/local-mock.md](docs/local-mock.md) — run the whole flow locally, no AWS
 - [docs/e2e-validation.md](docs/e2e-validation.md) — end-to-end happy-path checklist
+- [docs/deployment.md](docs/deployment.md) — AWS deployment runbook
 - `.kiro/steering/` + `.kiro/specs/mvp/` — product/tech/security steering and the MVP spec
 
 ## Repository layout
