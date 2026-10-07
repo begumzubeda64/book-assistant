@@ -12,16 +12,30 @@ from src.core.middleware import RequestContextMiddleware
 # cover the shared auth-dependency behavior applied across those routes.
 
 
-def test_protected_route_without_token_fails_closed() -> None:
+def _fail_closed_app() -> FastAPI:
+    """A bare app whose settings have no bypass and no Cognito configured.
+
+    Overriding get_settings makes the test hermetic regardless of ambient
+    environment variables (e.g. a local-dev shell with the bypass enabled).
+    """
+    from src.core.config import Settings, get_settings
+
     app = FastAPI()
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_env="local", auth_allow_local_dev_user=False
+    )
 
     @app.get("/protected")
     async def protected(user: CurrentUser) -> dict[str, str]:  # noqa: ARG001
         return {"ok": "true"}
 
-    with TestClient(app) as client:
+    return app
+
+
+def test_protected_route_without_token_fails_closed() -> None:
+    with TestClient(_fail_closed_app()) as client:
         response = client.get("/protected")
 
     assert response.status_code == 401
@@ -29,15 +43,7 @@ def test_protected_route_without_token_fails_closed() -> None:
 
 
 def test_protected_route_with_token_not_yet_configured() -> None:
-    app = FastAPI()
-    app.add_middleware(RequestContextMiddleware)
-    register_exception_handlers(app)
-
-    @app.get("/protected")
-    async def protected(user: CurrentUser) -> dict[str, str]:  # noqa: ARG001
-        return {"ok": "true"}
-
-    with TestClient(app) as client:
+    with TestClient(_fail_closed_app()) as client:
         response = client.get(
             "/protected", headers={"Authorization": "Bearer sometoken"}
         )

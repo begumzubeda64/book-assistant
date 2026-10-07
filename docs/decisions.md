@@ -257,3 +257,21 @@ path remains the default. The explicit mock markers keep it honest — mocked
 output is never mistaken for real generation.
 
 **Status.** Accepted. See `docs/local-mock.md` for run instructions.
+
+---
+
+## 2026-10-07 — E2E validation as a portable smoke script
+
+**Decision.** End-to-end validation (group 15) is a stdlib-only Python script
+(`scripts/e2e_smoke.py`) that drives the full happy path over HTTP and asserts
+the spec's requirement checks, runnable unchanged against local-mock (now) and
+real AWS (post-deploy) via `--base-url`/`--token`. A companion checklist
+(`docs/e2e-validation.md`) maps each step to its requirement.
+
+**Why.** The real-AWS run depends on a live deployment (cost + account), so
+gating "done" on it would stall. A portable harness makes the critical path
+verifiable immediately against local-mock and ready to point at the deployment
+with zero changes.
+
+**Status.** Accepted. Local-mock run: 16/16 checks pass. Real-AWS run pending
+deployment.

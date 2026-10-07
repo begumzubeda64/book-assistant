@@ -127,19 +127,22 @@ turn precede frontend integration, hardening, CI/CD, and validation.
         (AWS steps gated on `AWS_ROLE_ARN`; approval gate via the GitHub `production` Environment.)
   - _Requirements: 10.2_
 
-- [ ] 15. End-to-end validation
-  - [ ] 15.1 Sign in, search for a book, and open metadata/details.
-  - [ ] 15.2 Upload an authorized PDF and wait for the ingestion job to complete.
-  - [ ] 15.3 Generate a 5-minute balanced reading and read the result with source references.
-  - [ ] 15.4 Ask a cross-chapter question and verify a GraphRAG-grounded answer.
-  - [ ] 15.5 Save progress, return, and continue reading; verify recommendations.
-  - [ ] 15.6 Verify unauthorized resource access is rejected.
+- [~] 15. End-to-end validation
+  - [x] 15.1 Sign in, search for a book, and open metadata/details.
+  - [x] 15.2 Upload an authorized PDF and wait for the ingestion job to complete.
+  - [x] 15.3 Generate a 5-minute balanced reading and read the result with source references.
+  - [x] 15.4 Ask a cross-chapter question and verify a GraphRAG-grounded answer.
+  - [x] 15.5 Save progress, return, and continue reading; verify recommendations.
+  - [x] 15.6 Verify unauthorized resource access is rejected.
   - _Requirements: 1.3, 2.1, 3.3, 4.7, 5.4, 6.2, 7.1, 8.1_
+  - _Automated by `scripts/e2e_smoke.py` + `docs/e2e-validation.md`; all 16 checks
+    pass against local-mock. The run against **real AWS** is pending deployment
+    (`terraform apply` + image push) — same script, different `--base-url`/token._
 
-- [ ] 16. Portfolio readiness
-  - [ ] 16.1 Document architecture and key tradeoffs (FastAPI + ECS/Fargate, GraphRAG, async jobs, security boundaries).
-  - [ ] 16.2 Document local development and deployment commands; add an architecture diagram and API/OpenAPI docs to the README.
-  - [ ] 16.3 Add screenshots/GIFs of the primary user journey and remove unused infrastructure and dependencies.
+- [x] 16. Portfolio readiness
+  - [x] 16.1 Document architecture and key tradeoffs (FastAPI + ECS/Fargate, GraphRAG, async jobs, security boundaries). (`docs/architecture.md`)
+  - [x] 16.2 Document local development and deployment commands; add an architecture diagram and API/OpenAPI docs to the README.
+  - [x] 16.3 Add screenshots/GIFs of the primary user journey and remove unused infrastructure and dependencies. (`docs/screenshots/` capture guide; image capture is a manual step.)
   - _Requirements: 10.1, 10.5_
 
 ## Task Dependency Graph

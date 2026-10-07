@@ -27,12 +27,12 @@ def test_limiter_is_per_user_and_per_operation() -> None:
 
 
 def test_limiter_window_expiry() -> None:
-    limiter = InMemoryRateLimiter(limit=1, window_seconds=0.05)
+    limiter = InMemoryRateLimiter(limit=1, window_seconds=0.2)
     assert limiter.check("u1", "op") is True
     assert limiter.check("u1", "op") is False
     import time
 
-    time.sleep(0.06)
+    time.sleep(0.35)  # comfortably past the window to avoid timing flakiness
     assert limiter.check("u1", "op") is True  # window rolled over
 
 

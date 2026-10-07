@@ -334,6 +334,17 @@ Also implemented:
   `prod` gated by a GitHub Environment). AWS steps gated on `AWS_ROLE_ARN` so CI
   is green pre-AWS. See `.github/workflows/README.md`.
 
+Also implemented:
+- **E2E validation (group 15)** — `scripts/e2e_smoke.py` drives the full happy
+  path over HTTP (search → upload → ingest → 5-min reading → cross-chapter
+  question → progress/continue → unauthorized-access rejected); 16/16 checks pass
+  against local-mock. Real-AWS run is the same script post-deploy. Checklist in
+  `docs/e2e-validation.md`.
+- **Portfolio (group 16)** — `docs/architecture.md` (diagram + tradeoffs),
+  README polish (summary, features, docs index), `docs/screenshots/` capture
+  guide, and a cleanup pass (removed redundant `.gitkeep`s; hardened two tests).
+
 Remaining:
-- e2e validation (15, needs real AWS), portfolio (16).
+- Real-AWS provisioning + live e2e run (`terraform apply`, image push, deploy).
+- Capturing the actual screenshots/GIF from local-mock.
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.
