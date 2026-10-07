@@ -13,6 +13,11 @@ output "kb_chunk_bucket_name" {
   value       = aws_s3_bucket.kb_chunks.id
 }
 
+output "kb_chunk_bucket_arn" {
+  description = "Prepared-chunk bucket ARN (for IAM policies)."
+  value       = aws_s3_bucket.kb_chunks.arn
+}
+
 output "graphrag_graph_arn" {
   description = "Neptune Analytics graph ARN."
   value       = aws_neptunegraph_graph.graphrag.arn

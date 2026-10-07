@@ -49,6 +49,26 @@ output "reading_results_bucket_name" {
   value       = module.storage.reading_results_bucket_name
 }
 
+output "ecr_repository_urls" {
+  description = "ECR repository URLs (api, mcp, agent-*)."
+  value       = module.ecr.repository_urls
+}
+
+output "api_url" {
+  description = "Public API base URL (ALB DNS). Null until certificate_arn is set."
+  value       = try("https://${module.alb[0].alb_dns_name}", null)
+}
+
+output "ecs_cluster_name" {
+  description = "ECS cluster name (for CI deploy). Null until compute is created."
+  value       = try(module.ecs[0].cluster_name, null)
+}
+
+output "ecs_api_service_name" {
+  description = "API ECS service name (for CI deploy). Null until compute is created."
+  value       = try(module.ecs[0].api_service_name, null)
+}
+
 output "conversations_table_name" {
   description = "Conversations table name (CONVERSATIONS_TABLE_NAME)."
   value       = module.database.conversations_table_name

@@ -344,7 +344,15 @@ Also implemented:
   README polish (summary, features, docs index), `docs/screenshots/` capture
   guide, and a cleanup pass (removed redundant `.gitkeep`s; hardened two tests).
 
-Remaining:
-- Real-AWS provisioning + live e2e run (`terraform apply`, image push, deploy).
-- Capturing the actual screenshots/GIF from local-mock.
+Also implemented:
+- **Compute/network infra** — `modules/networking` (VPC, 2-AZ public/private
+  subnets, NAT, SGs), `modules/alb` (HTTPS + redirect, `/health` target group),
+  `modules/ecs` (Fargate API + MCP services, private no-public-IP tasks,
+  least-privilege roles, autoscaling), `modules/ecr` (5 repos). Root wires them;
+  ALB/ECS gated on `certificate_arn`. `terraform validate` passes.
+
+Remaining (needs AWS account / manual):
+- ACM cert + DNS, per-agent AgentCore runtimes + SQS wiring, CloudFront/S3
+  frontend hosting, Cognito hosted-UI frontend auth.
+- `terraform apply` + image push + live e2e run; capture screenshots/GIF.
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.

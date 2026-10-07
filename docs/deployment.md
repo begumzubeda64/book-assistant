@@ -3,13 +3,14 @@
 How to take Book Companion from the repo to a running stack in **`eu-central-1`**.
 
 > **Status note — read first.** The application code (FastAPI, 3 agents, MCP
-> server), and the Terraform modules for **cognito, storage, database (DynamoDB),
-> messaging (SQS), ai (Bedrock KB + Neptune Analytics GraphRAG), ecr, and
-> observability** are implemented. The **networking, ecs, and alb** modules are
-> still skeletons (deferred). Steps that depend on them are marked
-> **[needs infra]** and require implementing those modules first (see
-> `infrastructure/SECURITY.md` → "Deferred"). Everything else can be provisioned
-> today.
+> server) and the Terraform for **networking, alb, ecs, cognito, storage,
+> database (DynamoDB), messaging (SQS), ai (Bedrock KB + Neptune Analytics
+> GraphRAG), ecr, and observability** are implemented. Compute (ALB + ECS) is
+> **gated on `certificate_arn`**: provision networking/registry/data first, then
+> set the cert to bring up the services. Remaining before a fully live stack:
+> an ACM certificate + DNS, the per-agent **AgentCore Runtime** resources + SQS
+> event wiring, CloudFront/S3 **frontend hosting**, and the Cognito hosted-UI
+> auth path in the frontend (all listed at the end).
 
 ## 0. Prerequisites
 
@@ -37,13 +38,28 @@ terraform plan  -var-file=environments/dev/dev.tfvars
 terraform apply -var-file=environments/dev/dev.tfvars
 ```
 
-This creates (today): Cognito user pool + client, S3 buckets (uploads, reading
-results, KB chunks — all public-access-blocked), DynamoDB tables (jobs,
-progress, conversations), SQS job queue + DLQ, the Bedrock Knowledge Base +
-Neptune Analytics graph, ECR repositories, and CloudWatch alarms.
+This creates: the VPC (public/private subnets across 2 AZs, IGW, NAT, SGs),
+Cognito user pool + client, S3 buckets (uploads, reading results, KB chunks —
+all public-access-blocked), DynamoDB tables (jobs, progress, conversations), SQS
+job queue + DLQ, the Bedrock Knowledge Base + Neptune Analytics graph, ECR
+repositories, and CloudWatch alarms.
 
-**[needs infra]** Networking (VPC/subnets/SGs), the ECS cluster + Fargate
-service + task roles, and the ALB are added when those modules are implemented.
+### Bring up compute (two-stage)
+
+The ALB and ECS services are gated on `certificate_arn` (so you can provision
+the data/registry layers and push images first). Once you have an ACM
+certificate and the images are in ECR:
+
+```bash
+terraform apply -var-file=environments/dev/dev.tfvars \
+  -var 'certificate_arn=arn:aws:acm:eu-central-1:<acct>:certificate/<id>' \
+  -var 'image_tag=latest'
+```
+
+This adds the ALB (HTTPS + HTTP→HTTPS redirect) and the ECS Fargate services
+(API behind the ALB, MCP internal) in **private subnets with no public IPs**,
+each with a least-privilege task role, plus API autoscaling. `terraform output
+api_url` prints the public endpoint.
 
 ### Capture outputs → backend env
 
@@ -153,12 +169,15 @@ terraform destroy -var-file=environments/dev/dev.tfvars
 
 ## Remaining infra work (to make this fully executable)
 
-1. Implement `modules/networking` (VPC, public/private subnets ≥2 AZs, SGs,
-   egress), `modules/ecs` (cluster, Fargate task defs + services for API and MCP,
-   execution + least-privilege task roles, autoscaling, `assign_public_ip=false`),
-   and `modules/alb` (ALB, HTTPS listener + ACM cert, target group, `/health`).
-2. Add the per-agent AgentCore Runtime resources + SQS event wiring in
-   `modules/ai`.
-3. Add CloudFront + S3 frontend hosting in `modules/storage`.
-4. Build the Cognito hosted-UI / token-exchange path in the frontend
+Done: `modules/networking`, `modules/alb`, `modules/ecs` (API + MCP Fargate
+services, least-privilege roles, autoscaling, private tasks).
+
+Still required for a fully live stack:
+
+1. An **ACM certificate** (+ DNS/Route 53 record to the ALB) — set
+   `certificate_arn` to bring up compute.
+2. Per-agent **AgentCore Runtime** resources + SQS event-source wiring in
+   `modules/ai` (the three agent images deploy to their own runtimes).
+3. **CloudFront + S3 frontend hosting** in `modules/storage`.
+4. The **Cognito hosted-UI / token-exchange** path in the frontend
    (`VITE_AUTH_MODE=cognito`).

@@ -9,9 +9,9 @@ the infrastructure task group).
 
 | Invariant | Status | Where |
 |-----------|--------|-------|
-| ECS tasks in private subnets, no public IPs | Deferred | `modules/networking`, `modules/ecs` (skeletons); `assign_public_ip=false` to be set on the service |
-| ALB is the only public entry point, HTTPS only | Deferred | `modules/alb` (skeleton): HTTPS listener + HTTP→HTTPS redirect |
-| Security groups restrict traffic to required paths | Deferred | `modules/networking` / `modules/ecs` |
+| ECS tasks in private subnets, no public IPs | **Enforced** | `modules/ecs` services set `assign_public_ip=false` in private subnets (`modules/networking`) |
+| ALB is the only public entry point, HTTPS only | **Enforced** | `modules/alb`: internet-facing ALB, HTTPS listener (TLS 1.3 policy) + HTTP→HTTPS 301 redirect |
+| Security groups restrict traffic to required paths | **Enforced** | ALB SG allows 80/443 from internet; tasks SG allows the app port **only from the ALB SG** |
 
 ## S3
 
@@ -35,7 +35,7 @@ the infrastructure task group).
 | Invariant | Status | Where |
 |-----------|--------|-------|
 | KB role scoped to its bucket + graph + embed model | **Enforced** | `modules/ai` `aws_iam_role_policy.kb_policy` (no wildcards beyond the graph resource) |
-| Separate least-privilege roles per tier (API / each agent / MCP) | Deferred | `modules/ecs` (API task role) + `modules/ai` (agent/MCP roles) — added with provisioning |
+| Separate least-privilege roles per tier (API / MCP) | **Enforced** | `modules/ecs`: distinct API + MCP task roles (API: scoped DynamoDB/S3/SQS; MCP: scoped S3 + Bedrock). Agent AgentCore roles added with the agent-runtime provisioning. |
 
 ## AI / cost-abuse
 
