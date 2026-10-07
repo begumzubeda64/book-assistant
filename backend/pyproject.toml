@@ -22,7 +22,7 @@ dependencies = [
 agents = [
     "langgraph>=0.2,<1.0",
     "bedrock-agentcore>=0.1,<1.0",
-    "pypdf>=4.2,<6.0",
+    "pypdf>=4.2,<7.0",
     "mcp>=1.2,<2.0",
 ]
 dev = [
@@ -34,7 +34,7 @@ dev = [
     # Agent deps are needed locally to run and test the agent pipeline.
     "langgraph>=0.2,<1.0",
     "bedrock-agentcore>=0.1,<1.0",
-    "pypdf>=4.2,<6.0",
+    "pypdf>=4.2,<7.0",
     "mcp>=1.2,<2.0",
 ]
 
