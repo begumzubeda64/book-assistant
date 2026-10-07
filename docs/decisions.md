@@ -236,3 +236,24 @@ shared store (DynamoDB/Redis) when horizontal scaling makes that necessary,
 without changing endpoints.
 
 **Status.** Accepted.
+
+---
+
+## 2026-10-07 — Local mock mode for the full journey without AWS
+
+**Decision.** Added an opt-in local mock mode (`APP_ENV=local` + `LOCAL_MOCK=true`)
+that makes the entire user journey clickable locally without AWS: in-memory
+repositories, an inline job runner (SQS/AgentCore stand-in that runs the agents
+synchronously on enqueue), a local keyword-based knowledge base
+(ingest/retrieve), and a deterministic mock text generator. AI output is prefixed
+`[local mock output — not real AI generation]`; the frontend shows an amber
+banner when `VITE_LOCAL_MOCK=true`.
+
+**Why.** Bedrock KB + Neptune Analytics have no local emulator, so the AI flows
+couldn't be exercised locally. Mock mode enables demos and manual testing of the
+whole flow at zero AWS cost, while the fakes implement the **same ports** as the
+real integrations so the application services are reused unchanged and the AWS
+path remains the default. The explicit mock markers keep it honest — mocked
+output is never mistaken for real generation.
+
+**Status.** Accepted. See `docs/local-mock.md` for run instructions.

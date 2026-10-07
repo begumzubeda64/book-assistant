@@ -142,11 +142,18 @@ BookServiceDep = Annotated[
 
 def _build_job_service(settings: Settings) -> JobService:
     """Construct the JobService with DynamoDB repo + SQS queue (or no-op)."""
+    from src.services.jobs import JobService
+
+    if settings.use_local_mock:
+        from src.local_mock.container import get_local_mock_container
+
+        c = get_local_mock_container()
+        return JobService(repository=c.jobs, queue=c.queue)
+
     import boto3
 
     from src.integrations.sqs import NullQueue, QueuePort, SqsQueue
     from src.repositories.jobs import DynamoDBJobRepository
-    from src.services.jobs import JobService
 
     if not settings.jobs_table_name:
         raise ServiceUnavailableError("Job storage is not configured")
@@ -176,8 +183,19 @@ JobServiceDep = Annotated["JobService", Depends(get_job_service)]
 
 def get_upload_service(settings: SettingsDep) -> UploadService:
     """Construct the UploadService; requires a configured uploads bucket."""
-    from src.integrations.s3_storage import S3Storage
     from src.services.uploads import UploadService
+
+    if settings.use_local_mock:
+        from src.local_mock.container import get_local_mock_container
+
+        c = get_local_mock_container()
+        return UploadService(
+            storage=c.storage,
+            jobs=_build_job_service(settings),
+            verify_object_exists=False,
+        )
+
+    from src.integrations.s3_storage import S3Storage
 
     if not settings.uploads_bucket_name:
         raise ServiceUnavailableError("Uploads are not configured")
@@ -195,10 +213,18 @@ UploadServiceDep = Annotated["UploadService", Depends(get_upload_service)]
 
 def get_progress_service(settings: SettingsDep) -> ProgressService:
     """Construct the ProgressService; requires a configured progress table."""
+    from src.services.progress import ProgressService
+
+    if settings.use_local_mock:
+        from src.local_mock.container import get_local_mock_container
+
+        return ProgressService(
+            repository=get_local_mock_container().progress
+        )
+
     import boto3
 
     from src.repositories.progress import DynamoDBProgressRepository
-    from src.services.progress import ProgressService
 
     if not settings.progress_table_name:
         raise ServiceUnavailableError("Progress storage is not configured")
@@ -221,6 +247,11 @@ def get_reading_result_repository(
     settings: SettingsDep,
 ) -> ReadingResultRepository:
     """Reader for stored adaptive-reading results; requires the results bucket."""
+    if settings.use_local_mock:
+        from src.local_mock.container import get_local_mock_container
+
+        return get_local_mock_container().reading_store
+
     from src.repositories.reading_results import S3ReadingResultRepository
 
     if not settings.reading_results_bucket_name:
@@ -242,13 +273,25 @@ def get_discussion_service(settings: SettingsDep) -> DiscussionService:
     GraphRAG-retrieval and text-generation capabilities require the Knowledge
     Base and Bedrock to be configured.
     """
+    from src.agents.discussion.agent import DiscussionAgent
+    from src.services.discussions import DiscussionService
+
+    if settings.use_local_mock:
+        from src.local_mock.container import get_local_mock_container
+
+        c = get_local_mock_container()
+        return DiscussionService(
+            repository=c.conversations,
+            agent=DiscussionAgent(
+                retriever=c.knowledge_base, generator=c.generator
+            ),
+        )
+
     import boto3
 
-    from src.agents.discussion.agent import DiscussionAgent
     from src.mcp_server.tools.generation import TextGenerationTool
     from src.mcp_server.tools.graphrag import GraphRAGRetrievalTool
     from src.repositories.conversations import DynamoDBConversationRepository
-    from src.services.discussions import DiscussionService
 
     if not settings.conversations_table_name:
         raise ServiceUnavailableError("Discussions are not configured")

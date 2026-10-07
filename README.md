@@ -74,6 +74,12 @@ The API is served at `http://localhost:8000`; OpenAPI docs at
 docker compose up --build
 ```
 
+### Click the whole journey locally (no AWS)
+
+Local **mock mode** runs the entire flow (upload → adaptive reading →
+discussion → progress) in-process with in-memory fakes and clearly-marked mock
+AI output — no AWS required. See **[docs/local-mock.md](docs/local-mock.md)**.
+
 ### Tests
 
 ```bash

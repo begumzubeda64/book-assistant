@@ -22,8 +22,26 @@ CHUNK_TARGET_WORDS = 220
 _CHAPTER_RE = re.compile(r"^\s*(chapter|part)\s+([\dIVXLC]+)\b", re.IGNORECASE)
 
 
+# Sentinel prefix used by local mock mode to carry plain text instead of a real
+# PDF (keeps the demo flow working without a PDF-generation dependency).
+_MOCK_PDF_PREFIX = b"%PDF-LOCALMOCK%"
+
+
 def extract_pages(pdf_bytes: bytes) -> list[str]:
-    """Extract text per page using pypdf. Returns one string per page."""
+    """Extract text per page using pypdf. Returns one string per page.
+
+    Recognizes the local-mock sentinel and returns its carried text directly.
+    """
+    if pdf_bytes.startswith(_MOCK_PDF_PREFIX):
+        text = pdf_bytes[len(_MOCK_PDF_PREFIX) :].decode("utf-8", errors="replace")
+        # Split into pseudo-pages so chunking/provenance still exercise.
+        words = text.split()
+        page_size = 180
+        return [
+            " ".join(words[i : i + page_size])
+            for i in range(0, len(words), page_size)
+        ] or [text]
+
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(pdf_bytes))

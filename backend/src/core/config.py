@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     auth_allow_local_dev_user: bool = False
     local_dev_user_id: str = "local-dev-user"
 
+    # Local mock mode: run the whole journey in-process with in-memory fakes and
+    # an inline agent runner (no AWS). Only honored when app_env=local. The AI
+    # output is deterministic and clearly marked as mocked.
+    local_mock: bool = False
+
+    @property
+    def use_local_mock(self) -> bool:
+        return self.local_mock and self.app_env == "local"
+
     @property
     def cognito_issuer(self) -> str | None:
         """The expected JWT issuer (iss) for the configured user pool."""

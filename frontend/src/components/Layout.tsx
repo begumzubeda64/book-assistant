@@ -8,11 +8,19 @@ const NAV = [
   { to: "/recommendations", label: "Recommendations" },
 ];
 
+const LOCAL_MOCK = import.meta.env.VITE_LOCAL_MOCK === "true";
+
 export function Layout() {
   const { user, signOut, mode } = useAuth();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      {LOCAL_MOCK && (
+        <div className="bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-white">
+          Local mock mode — AI output (readings &amp; answers) is simulated, not
+          real generation.
+        </div>
+      )}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-8">
