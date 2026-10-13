@@ -8,43 +8,61 @@ import {
 
 import { setTokenProvider } from "@/services/api";
 
+import {
+  beginSignIn,
+  getAccessToken,
+  getUserFromIdToken,
+  hostedLogout,
+} from "./cognito";
 import { AuthContext, type AuthMode, type AuthState, type AuthUser } from "./useAuth";
 
 /**
  * Authentication provider.
  *
- * Local-dev-first: when VITE_AUTH_MODE is "local" (the default), signing in is a
- * no-op that marks the session authenticated and relies on the backend's
- * local-dev auth bypass (no bearer token required). The real Cognito flow slots
- * in behind VITE_AUTH_MODE="cognito" later, providing a real access token via
- * `getToken`.
+ * - VITE_AUTH_MODE="local" (default): signing in is a no-op; the backend's
+ *   local-dev bypass authenticates requests (no bearer token).
+ * - VITE_AUTH_MODE="cognito": real Cognito Hosted UI (authorization code + PKCE,
+ *   see cognito.ts). Access tokens are sent as the bearer credential.
  */
 
 const AUTH_MODE = (import.meta.env.VITE_AUTH_MODE ?? "local") as AuthMode;
 const LOCAL_DEV_USER: AuthUser = { userId: "local-dev-user", email: "dev@local" };
 
+function initialUser(): AuthUser | null {
+  if (AUTH_MODE === "local") return LOCAL_DEV_USER;
+  // Cognito: restore from a valid stored session if present.
+  return getAccessToken() ? getUserFromIdToken() : null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(
-    AUTH_MODE === "local" ? LOCAL_DEV_USER : null,
-  );
+  const [user, setUser] = useState<AuthUser | null>(initialUser);
 
   const signIn = useCallback(async () => {
     if (AUTH_MODE === "local") {
       setUser(LOCAL_DEV_USER);
       return;
     }
-    // TODO(auth): redirect to the Cognito Hosted UI / exchange code for tokens.
-    throw new Error("Cognito sign-in is not configured yet");
+    await beginSignIn(); // redirects to the Hosted UI
   }, []);
 
   const signOut = useCallback(() => {
+    if (AUTH_MODE === "cognito") {
+      hostedLogout(); // clears tokens + redirects to the Hosted UI logout
+      return;
+    }
     setUser(null);
   }, []);
 
   const getToken = useCallback(async () => {
     if (AUTH_MODE === "local") return null;
-    // TODO(auth): return the current Cognito access token.
-    return null;
+    return getAccessToken();
+  }, []);
+
+  // Keep the user in sync with Cognito session state (e.g. after callback).
+  const refreshUser = useCallback(() => {
+    if (AUTH_MODE === "cognito") {
+      setUser(getAccessToken() ? getUserFromIdToken() : null);
+    }
   }, []);
 
   useEffect(() => {
@@ -59,8 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       getToken,
+      refreshUser,
     }),
-    [user, signIn, signOut, getToken],
+    [user, signIn, signOut, getToken, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -167,17 +167,42 @@ terraform destroy -var-file=environments/dev/dev.tfvars
 > **Cost note:** Neptune Analytics and always-on Fargate tasks are the main cost
 > drivers. Destroy dev stacks when idle.
 
-## Remaining infra work (to make this fully executable)
+## Agents, frontend hosting, and Cognito auth
 
-Done: `modules/networking`, `modules/alb`, `modules/ecs` (API + MCP Fargate
-services, least-privilege roles, autoscaling, private tasks).
+These are implemented and apply as part of the two-stage flow:
 
-Still required for a fully live stack:
+- **AgentCore runtimes** — `modules/ai` creates three `awscc_bedrockagentcore_runtime`
+  resources (ingestion, adaptive, discussion) with a least-privilege execution
+  role, gated on `-var 'deploy_agents=true'` once the agent images are in ECR:
+  ```bash
+  terraform apply -var-file=environments/dev/dev.tfvars \
+    -var 'deploy_agents=true' -var 'image_tag=latest' \
+    -var 'certificate_arn=arn:aws:acm:eu-central-1:<acct>:certificate/<id>'
+  ```
+  SQS → agent delivery: AgentCore runtimes are invoked (not a native SQS event
+  source), so a thin consumer (the API's workflow helper or a small poller)
+  reads the queue and invokes the matching runtime. Runtime ARNs are in the
+  `agent_runtime_arns` output.
+- **Frontend hosting** — `modules/storage` provisions a private S3 bucket + a
+  CloudFront distribution (OAC, SPA fallback). Build and publish:
+  ```bash
+  cd frontend
+  VITE_API_BASE_URL=https://<api-host> VITE_AUTH_MODE=cognito \
+    VITE_COGNITO_DOMAIN=<hosted-ui-domain> VITE_COGNITO_CLIENT_ID=<client> \
+    VITE_COGNITO_REDIRECT=https://<frontend-host>/auth/callback npm run build
+  aws s3 sync dist/ s3://$(terraform -chdir=../infrastructure/terraform output -raw frontend_bucket_name)/ --delete
+  aws cloudfront create-invalidation --distribution-id <id> --paths '/*'
+  ```
+- **Cognito Hosted UI auth** — the frontend implements the authorization-code +
+  PKCE flow (`features/auth/cognito.ts`, `/auth/callback` route). Configure the
+  Cognito app client's callback URL (`/auth/callback`) and sign-out URL, and a
+  Hosted UI domain.
 
-1. An **ACM certificate** (+ DNS/Route 53 record to the ALB) — set
-   `certificate_arn` to bring up compute.
-2. Per-agent **AgentCore Runtime** resources + SQS event-source wiring in
-   `modules/ai` (the three agent images deploy to their own runtimes).
-3. **CloudFront + S3 frontend hosting** in `modules/storage`.
-4. The **Cognito hosted-UI / token-exchange** path in the frontend
-   (`VITE_AUTH_MODE=cognito`).
+## Remaining to go fully live
+
+1. An **ACM certificate** (+ DNS/Route 53 alias to the ALB and, if used, a custom
+   domain for CloudFront).
+2. A **Cognito Hosted UI domain** + app-client callback/logout URLs.
+3. The SQS→AgentCore **invoke bridge** (thin consumer) if not running inline.
+4. Run `terraform apply` (two-stage), push images, publish the frontend, and
+   run `scripts/e2e_smoke.py` against the live API.

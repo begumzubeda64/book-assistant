@@ -15,6 +15,8 @@ export interface AuthState {
   signOut: () => void;
   /** Returns a bearer token, or null in local-dev mode. */
   getToken: () => Promise<string | null>;
+  /** Re-read the session from storage (used after the Cognito callback). */
+  refreshUser: () => void;
 }
 
 export const AuthContext = createContext<AuthState | null>(null);

@@ -117,6 +117,21 @@ module "messaging" {
 module "ai" {
   source      = "./modules/ai"
   name_prefix = local.name_prefix
+  environment = var.environment
+
+  # Agent runtimes (two-stage like compute: enable once agent images are pushed).
+  deploy_agents = var.deploy_agents
+  agent_image_uris = var.deploy_agents ? {
+    ingestion  = "${module.ecr.repository_urls["agent-ingestion"]}:${var.image_tag}"
+    adaptive   = "${module.ecr.repository_urls["agent-adaptive"]}:${var.image_tag}"
+    discussion = "${module.ecr.repository_urls["agent-discussion"]}:${var.image_tag}"
+  } : {}
+
+  jobs_queue_arn             = module.messaging.jobs_queue_arn
+  uploads_bucket_arn         = module.storage.uploads_bucket_arn
+  reading_results_bucket_arn = module.storage.reading_results_bucket_arn
+  jobs_table_arn             = module.database.jobs_table_arn
+  conversations_table_arn    = module.database.conversations_table_arn
 }
 #
 module "observability" {

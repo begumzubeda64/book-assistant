@@ -59,6 +59,21 @@ output "api_url" {
   value       = try("https://${module.alb[0].alb_dns_name}", null)
 }
 
+output "frontend_url" {
+  description = "Public frontend URL (CloudFront)."
+  value       = "https://${module.storage.frontend_cloudfront_domain}"
+}
+
+output "frontend_bucket_name" {
+  description = "Bucket to upload the built SPA to."
+  value       = module.storage.frontend_bucket_name
+}
+
+output "agent_runtime_arns" {
+  description = "AgentCore runtime ARNs (empty until deploy_agents=true)."
+  value       = module.ai.agent_runtime_arns
+}
+
 output "ecs_cluster_name" {
   description = "ECS cluster name (for CI deploy). Null until compute is created."
   value       = try(module.ecs[0].cluster_name, null)

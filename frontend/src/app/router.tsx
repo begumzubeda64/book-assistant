@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { NotFoundPage } from "@/components/NotFoundPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AuthCallbackPage } from "@/features/auth/AuthCallbackPage";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { BookDetailPage } from "@/features/books/BookDetailPage";
 import { DiscoverPage } from "@/features/books/DiscoverPage";
@@ -15,6 +16,7 @@ import { RecommendationsPage } from "@/features/recommendations/RecommendationsP
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+  { path: "/auth/callback", element: <AuthCallbackPage /> },
   {
     element: <ProtectedRoute />,
     children: [

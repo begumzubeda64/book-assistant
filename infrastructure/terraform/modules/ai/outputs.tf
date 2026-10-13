@@ -22,3 +22,8 @@ output "graphrag_graph_arn" {
   description = "Neptune Analytics graph ARN."
   value       = aws_neptunegraph_graph.graphrag.arn
 }
+
+output "agent_runtime_arns" {
+  description = "Map of agent name -> AgentCore runtime ARN (empty until deploy_agents)."
+  value       = { for k, r in awscc_bedrockagentcore_runtime.agent : k => r.agent_runtime_arn }
+}

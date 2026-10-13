@@ -27,9 +27,18 @@ variable "app_port" {
 }
 
 variable "image_tag" {
-  description = "Image tag to deploy for the API/MCP services."
+  description = "Image tag to deploy for the API/MCP/agent images."
   type        = string
   default     = "latest"
+}
+
+variable "deploy_agents" {
+  description = <<-EOT
+    Create the three AgentCore agent runtimes. Enable once the agent images are
+    pushed to ECR (two-stage apply, like the ALB/ECS compute).
+  EOT
+  type        = bool
+  default     = false
 }
 
 variable "certificate_arn" {

@@ -17,3 +17,18 @@ output "reading_results_bucket_arn" {
   description = "Reading-results bucket ARN (for IAM policies)."
   value       = aws_s3_bucket.reading_results.arn
 }
+
+output "frontend_bucket_name" {
+  description = "Frontend hosting bucket (upload the built SPA here)."
+  value       = aws_s3_bucket.frontend.id
+}
+
+output "frontend_cloudfront_domain" {
+  description = "CloudFront domain serving the frontend."
+  value       = aws_cloudfront_distribution.frontend.domain_name
+}
+
+output "frontend_cloudfront_distribution_id" {
+  description = "CloudFront distribution id (for cache invalidation on deploy)."
+  value       = aws_cloudfront_distribution.frontend.id
+}

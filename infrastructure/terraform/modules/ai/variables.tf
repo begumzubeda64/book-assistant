@@ -3,6 +3,12 @@ variable "name_prefix" {
   type        = string
 }
 
+variable "environment" {
+  description = "Environment name (dev/prod), passed to agent runtimes."
+  type        = string
+  default     = "dev"
+}
+
 variable "embedding_model_arn" {
   description = "Bedrock embedding model ARN (must be available in eu-central-1)."
   type        = string
@@ -25,4 +31,56 @@ variable "deletion_protection" {
   description = "Protect the Neptune Analytics graph from deletion."
   type        = bool
   default     = false
+}
+
+# --- AgentCore runtimes (one isolated image per agent) ---
+variable "deploy_agents" {
+  description = <<-EOT
+    Create the three AgentCore runtimes. Requires the agent images to exist in
+    ECR; set once images are pushed (two-stage apply, like the ALB/ECS compute).
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "agent_image_uris" {
+  description = "ECR image URIs for the agents (keys: ingestion, adaptive, discussion)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "generation_model_id" {
+  description = "Bedrock generation model id used by the reading/discussion agents."
+  type        = string
+  default     = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+}
+
+variable "jobs_queue_arn" {
+  description = "SQS job queue ARN the async agents consume (for the trigger role)."
+  type        = string
+  default     = ""
+}
+
+variable "uploads_bucket_arn" {
+  description = "Uploads bucket ARN (agent content access)."
+  type        = string
+  default     = ""
+}
+
+variable "reading_results_bucket_arn" {
+  description = "Reading-results bucket ARN (adaptive-reading output)."
+  type        = string
+  default     = ""
+}
+
+variable "jobs_table_arn" {
+  description = "Jobs table ARN (agents update job status)."
+  type        = string
+  default     = ""
+}
+
+variable "conversations_table_arn" {
+  description = "Conversations table ARN (discussion agent persistence)."
+  type        = string
+  default     = ""
 }

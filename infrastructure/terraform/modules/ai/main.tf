@@ -122,3 +122,103 @@ resource "awscc_bedrock_data_source" "chunks" {
     }
   }
 }
+
+# --- Agent tier: AgentCore runtimes (one isolated image per agent) ---
+#
+# Created when deploy_agents=true and the agent images exist in ECR (two-stage,
+# like the ALB/ECS compute). Each agent runs as its own runtime so they deploy,
+# scale, and fail independently (decisions.md). A single least-privilege
+# execution role is scoped to the KB, chunk/upload/result buckets, job +
+# conversation tables, SQS, and Bedrock inference/retrieval.
+
+locals {
+  agents = var.deploy_agents ? {
+    ingestion  = try(var.agent_image_uris["ingestion"], "")
+    adaptive   = try(var.agent_image_uris["adaptive"], "")
+    discussion = try(var.agent_image_uris["discussion"], "")
+  } : {}
+}
+
+resource "aws_iam_role" "agent_exec" {
+  count = var.deploy_agents ? 1 : 0
+  name  = "${var.name_prefix}-agent-exec"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "bedrock-agentcore.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "agent_exec" {
+  count = var.deploy_agents ? 1 : 0
+  name  = "${var.name_prefix}-agent-exec-policy"
+  role  = aws_iam_role.agent_exec[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Bedrock"
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel", "bedrock:Retrieve", "bedrock:StartIngestionJob"
+        ]
+        Resource = ["*"]
+      },
+      {
+        Sid    = "ChunkAndArtifactBuckets"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = compact([
+          aws_s3_bucket.kb_chunks.arn, "${aws_s3_bucket.kb_chunks.arn}/*",
+          var.uploads_bucket_arn, var.uploads_bucket_arn == "" ? "" : "${var.uploads_bucket_arn}/*",
+          var.reading_results_bucket_arn, var.reading_results_bucket_arn == "" ? "" : "${var.reading_results_bucket_arn}/*",
+        ])
+      },
+      {
+        Sid      = "JobAndConversationTables"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
+        Resource = compact([var.jobs_table_arn, var.conversations_table_arn])
+      },
+      {
+        Sid      = "ConsumeJobQueue"
+        Effect   = "Allow"
+        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Resource = var.jobs_queue_arn == "" ? ["*"] : [var.jobs_queue_arn]
+      }
+    ]
+  })
+}
+
+resource "awscc_bedrockagentcore_runtime" "agent" {
+  for_each = local.agents
+
+  agent_runtime_name = replace("${var.name_prefix}-${each.key}", "-", "_")
+  role_arn           = aws_iam_role.agent_exec[0].arn
+
+  agent_runtime_artifact = {
+    container_configuration = {
+      container_uri = each.value
+    }
+  }
+
+  network_configuration = {
+    network_mode = "PUBLIC"
+  }
+
+  environment_variables = {
+    APP_ENV              = var.environment
+    AWS_REGION           = data.aws_region.current.name
+    KNOWLEDGE_BASE_ID    = awscc_bedrock_knowledge_base.graphrag.knowledge_base_id
+    KB_CHUNK_BUCKET_NAME = aws_s3_bucket.kb_chunks.id
+    GENERATION_MODEL_ID  = var.generation_model_id
+  }
+}

@@ -348,11 +348,19 @@ Also implemented:
 - **Compute/network infra** — `modules/networking` (VPC, 2-AZ public/private
   subnets, NAT, SGs), `modules/alb` (HTTPS + redirect, `/health` target group),
   `modules/ecs` (Fargate API + MCP services, private no-public-IP tasks,
-  least-privilege roles, autoscaling), `modules/ecr` (5 repos). Root wires them;
-  ALB/ECS gated on `certificate_arn`. `terraform validate` passes.
+  least-privilege roles, autoscaling), `modules/ecr` (5 repos). ALB/ECS gated on
+  `certificate_arn`.
+- **AgentCore runtimes** — `modules/ai` creates 3 `awscc_bedrockagentcore_runtime`
+  (one per agent) + least-privilege exec role, gated on `deploy_agents`.
+- **Frontend hosting** — `modules/storage` adds a private S3 bucket + CloudFront
+  (OAC, SPA fallback).
+- **Cognito Hosted UI auth** — frontend authorization-code + PKCE flow
+  (`features/auth/cognito.ts`, `/auth/callback`), token sent as bearer.
+- `terraform validate` passes; frontend build+lint clean.
 
 Remaining (needs AWS account / manual):
-- ACM cert + DNS, per-agent AgentCore runtimes + SQS wiring, CloudFront/S3
-  frontend hosting, Cognito hosted-UI frontend auth.
-- `terraform apply` + image push + live e2e run; capture screenshots/GIF.
+- ACM cert + DNS, Cognito Hosted UI domain + app-client URLs, SQS→AgentCore
+  invoke bridge.
+- `terraform apply` (two-stage) + image push + frontend publish + live e2e run;
+  capture screenshots/GIF.
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.
