@@ -92,6 +92,17 @@ module "ecs" {
     KNOWLEDGE_BASE_ID             = module.ai.knowledge_base_id
     KNOWLEDGE_BASE_DATA_SOURCE_ID = module.ai.knowledge_base_data_source_id
   }
+
+  # Dispatcher: enabled once agents are deployed (needs their runtime ARNs).
+  dispatcher_image   = var.deploy_agents ? "${module.ecr.repository_urls["api"]}:${var.image_tag}" : ""
+  agent_runtime_arns = var.deploy_agents ? values(module.ai.agent_runtime_arns) : ["*"]
+  dispatcher_environment = {
+    APP_ENV                     = var.environment
+    AWS_REGION                  = var.aws_region
+    JOBS_QUEUE_URL              = module.messaging.jobs_queue_url
+    AGENT_RUNTIME_ARN_INGESTION = try(module.ai.agent_runtime_arns["ingestion"], "")
+    AGENT_RUNTIME_ARN_ADAPTIVE  = try(module.ai.agent_runtime_arns["adaptive"], "")
+  }
 }
 
 module "cognito" {

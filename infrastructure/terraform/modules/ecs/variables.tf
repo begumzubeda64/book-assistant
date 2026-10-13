@@ -96,3 +96,22 @@ variable "jobs_queue_arn" {
   type    = string
   default = ""
 }
+
+# Dispatcher (SQS -> AgentCore bridge)
+variable "dispatcher_image" {
+  description = "ECR image for the dispatcher. Empty disables the service."
+  type        = string
+  default     = ""
+}
+
+variable "dispatcher_environment" {
+  description = "Environment variables for the dispatcher container."
+  type        = map(string)
+  default     = {}
+}
+
+variable "agent_runtime_arns" {
+  description = "AgentCore runtime ARNs the dispatcher may invoke."
+  type        = list(string)
+  default     = ["*"]
+}

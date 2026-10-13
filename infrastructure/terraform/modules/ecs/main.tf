@@ -211,6 +211,87 @@ resource "aws_ecs_service" "mcp" {
   depends_on = [aws_iam_role_policy.mcp_task]
 }
 
+# --- Dispatcher: SQS -> AgentCore bridge (own tier, no ALB) ---
+resource "aws_iam_role" "dispatcher_task" {
+  name = "${var.name_prefix}-dispatcher-task"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "dispatcher_task" {
+  name = "${var.name_prefix}-dispatcher-task-policy"
+  role = aws_iam_role.dispatcher_task.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ConsumeJobQueue"
+        Effect   = "Allow"
+        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Resource = var.jobs_queue_arn == "" ? ["*"] : [var.jobs_queue_arn]
+      },
+      {
+        Sid      = "InvokeAgents"
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource = var.agent_runtime_arns
+      }
+    ]
+  })
+}
+
+resource "aws_ecs_task_definition" "dispatcher" {
+  family                   = "${var.name_prefix}-dispatcher"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.dispatcher_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "dispatcher"
+      image     = var.dispatcher_image
+      essential = true
+      # Reuse the API image; run the dispatcher entrypoint instead of the server.
+      command     = ["python", "-m", "src.workflows.dispatcher_main"]
+      environment = [for k, v in var.dispatcher_environment : { name = k, value = v }]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_group_name
+          "awslogs-region"        = data.aws_region.current.name
+          "awslogs-stream-prefix" = "dispatcher"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_service" "dispatcher" {
+  count           = var.dispatcher_image == "" ? 0 : 1
+  name            = "${var.name_prefix}-dispatcher"
+  cluster         = aws_ecs_cluster.this.id
+  task_definition = aws_ecs_task_definition.dispatcher.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.tasks_security_group_id]
+    assign_public_ip = false
+  }
+
+  depends_on = [aws_iam_role_policy.dispatcher_task]
+}
+
 # --- API service autoscaling (CPU target tracking) ---
 resource "aws_appautoscaling_target" "api" {
   max_capacity       = var.api_max_count

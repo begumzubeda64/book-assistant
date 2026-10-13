@@ -108,7 +108,9 @@ the model is called only where generation is actually required.
 2. Router → service validates + authorizes (Cognito user_id)
 3. workflows/ helper creates a Job (DynamoDB, status=QUEUED) and enqueues to SQS
 4. API returns { job_id } immediately  (never blocks)
-5. The matching agent (its own AgentCore Runtime) consumes the SQS message
+5. The dispatcher service polls SQS and invokes the matching agent runtime
+   (bedrock-agentcore InvokeAgentRuntime), routing by job_type; it acks the
+   message on success, leaves it for redelivery (→ DLQ) on failure
 6. Agent runs its LangGraph graph, calling tools via the MCP server
 7. Result → S3; job status → PROCESSING → COMPLETED (or FAILED) in DynamoDB
 8. Frontend polls GET /api/v1/jobs/{job_id}; then reads the result
@@ -356,11 +358,14 @@ Also implemented:
   (OAC, SPA fallback).
 - **Cognito Hosted UI auth** — frontend authorization-code + PKCE flow
   (`features/auth/cognito.ts`, `/auth/callback`), token sent as bearer.
-- `terraform validate` passes; frontend build+lint clean.
+- **Dispatcher (SQS→AgentCore bridge)** — `workflows/dispatcher.py` +
+  `integrations/agentcore.py`; its own ECS service (reuses the API image,
+  dispatcher entrypoint) that polls SQS and invokes the matching agent runtime,
+  routing by job_type with ack-on-success / redelivery-on-failure.
+- `terraform validate` passes; frontend build+lint clean; 142 backend tests pass.
 
 Remaining (needs AWS account / manual):
-- ACM cert + DNS, Cognito Hosted UI domain + app-client URLs, SQS→AgentCore
-  invoke bridge.
+- ACM cert + DNS, Cognito Hosted UI domain + app-client URLs.
 - `terraform apply` (two-stage) + image push + frontend publish + live e2e run;
   capture screenshots/GIF.
 - Live AWS provisioning / real Bedrock+Neptune runs are deploy-time.

@@ -275,3 +275,26 @@ with zero changes.
 
 **Status.** Accepted. Local-mock run: 16/16 checks pass. Real-AWS run pending
 deployment.
+
+---
+
+## 2026-10-07 — SQS→AgentCore bridge as a dedicated dispatcher service
+
+**Decision.** The async bridge (consume the job queue, invoke the matching
+AgentCore agent runtime) is a dedicated **dispatcher** ECS service, not a thread
+in the API and not a Lambda. It reuses the API container image with the
+`src.workflows.dispatcher_main` entrypoint (command override in the task def),
+routes by `job_type`, acks a message only on a successful invoke (failures
+redeliver → DLQ), and has its own least-privilege task role (SQS receive/delete
++ `bedrock-agentcore:InvokeAgentRuntime`). The SQS receive/delete and the invoke
+call are behind ports (`SqsConsumerPort`, `AgentInvokerPort`) so the loop is
+unit-tested with fakes.
+
+**Why.** AgentCore runtimes are invoked, not a native SQS event source, so
+something must poll and invoke. A dedicated service keeps the API stateless,
+matches the "tiers fail independently" principle, and respects the steering rule
+against orchestration Lambda. The at-least-once + idempotent-agent design means
+redelivery is safe. The real `invoke_agent_runtime` call was verified against the
+boto3 `bedrock-agentcore` client (`agentRuntimeArn` + `payload`).
+
+**Status.** Accepted. Enabled with `deploy_agents=true`.

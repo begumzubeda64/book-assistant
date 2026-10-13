@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     ai_rate_limit_max: int = 20
     ai_rate_limit_window_seconds: float = 60.0
 
+    # Dispatcher (SQS -> AgentCore bridge): runtime ARNs to route jobs to.
+    agent_runtime_arn_ingestion: str | None = None
+    agent_runtime_arn_adaptive: str | None = None
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

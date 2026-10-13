@@ -180,8 +180,11 @@ These are implemented and apply as part of the two-stage flow:
     -var 'certificate_arn=arn:aws:acm:eu-central-1:<acct>:certificate/<id>'
   ```
   SQS → agent delivery: AgentCore runtimes are invoked (not a native SQS event
-  source), so a thin consumer (the API's workflow helper or a small poller)
-  reads the queue and invokes the matching runtime. Runtime ARNs are in the
+  source), so the **dispatcher** service (`modules/ecs`, reuses the API image
+  with the `src.workflows.dispatcher_main` entrypoint) polls the job queue and
+  invokes the matching runtime via `bedrock-agentcore:InvokeAgentRuntime`. It is
+  created automatically when `deploy_agents=true` (its task role is scoped to
+  SQS receive/delete + agent invoke). Runtime ARNs are in the
   `agent_runtime_arns` output.
 - **Frontend hosting** — `modules/storage` provisions a private S3 bucket + a
   CloudFront distribution (OAC, SPA fallback). Build and publish:
@@ -203,6 +206,8 @@ These are implemented and apply as part of the two-stage flow:
 1. An **ACM certificate** (+ DNS/Route 53 alias to the ALB and, if used, a custom
    domain for CloudFront).
 2. A **Cognito Hosted UI domain** + app-client callback/logout URLs.
-3. The SQS→AgentCore **invoke bridge** (thin consumer) if not running inline.
-4. Run `terraform apply` (two-stage), push images, publish the frontend, and
+3. Run `terraform apply` (two-stage), push images, publish the frontend, and
    run `scripts/e2e_smoke.py` against the live API.
+
+The SQS→AgentCore bridge is now the **dispatcher** ECS service (see above) — no
+longer a manual step.
