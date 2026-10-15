@@ -72,8 +72,18 @@ resource "aws_iam_role_policy" "kb_policy" {
         Resource = var.embedding_model_arn
       },
       {
-        Effect   = "Allow"
-        Action   = ["neptune-graph:*"]
+        # Explicit Neptune Analytics actions GraphRAG requires (per the Bedrock
+        # KB "vector database in Amazon Neptune Analytics" permissions doc).
+        # GetGraph is checked during KB creation; the query actions are used for
+        # graph read/write/delete during ingestion and retrieval.
+        Sid    = "NeptuneAnalyticsGraphAccess"
+        Effect = "Allow"
+        Action = [
+          "neptune-graph:GetGraph",
+          "neptune-graph:ReadDataViaQuery",
+          "neptune-graph:WriteDataViaQuery",
+          "neptune-graph:DeleteDataViaQuery",
+        ]
         Resource = aws_neptunegraph_graph.graphrag.arn
       }
     ]
