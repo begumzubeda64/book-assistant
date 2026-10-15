@@ -13,6 +13,21 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+locals {
+  # GraphRAG entity extraction (contextEnrichmentConfiguration) must reference a
+  # model that is actually invokable in this Region. In eu-central-1 the
+  # Anthropic Claude models are only reachable through an EU cross-Region
+  # inference profile (ARN prefix "eu."), not a bare foundation-model ARN, so a
+  # foundation-model ARN here fails with "Invalid graph bedrock foundation model
+  # provided". Prefer an explicitly supplied profile ARN; otherwise derive the
+  # account-scoped EU inference-profile ARN from the generation model id.
+  graph_construction_model_arn = (
+    var.graph_construction_model_arn != ""
+    ? var.graph_construction_model_arn
+    : "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:inference-profile/eu.${var.generation_model_id}"
+  )
+}
+
 # --- Prepared-chunk store (ingested content, ownership-scoped by key prefix) ---
 resource "aws_s3_bucket" "kb_chunks" {
   bucket = "${var.name_prefix}-kb-chunks"
@@ -67,13 +82,20 @@ resource "aws_iam_role_policy" "kb_policy" {
         Resource = [aws_s3_bucket.kb_chunks.arn, "${aws_s3_bucket.kb_chunks.arn}/*"]
       },
       {
-        # Embedding model (vectors) + generation model (GraphRAG chunk entity
-        # extraction during ingestion) are both invoked under this role.
+        # Embedding model (vectors) + the graph-construction model (GraphRAG
+        # chunk entity extraction during ingestion) are both invoked under this
+        # role. The graph-construction model is an EU cross-Region inference
+        # profile, so per the Bedrock inference-profile prerequisites the role
+        # must be granted both the inference-profile ARN AND the underlying
+        # foundation-model ARN in every destination Region the profile routes to
+        # (eu-central-1, eu-west-1, eu-west-3, eu-north-1) — scoped here with a
+        # Region wildcard on the foundation-model ARN.
         Effect = "Allow"
         Action = ["bedrock:InvokeModel"]
         Resource = [
           var.embedding_model_arn,
-          "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/${var.generation_model_id}",
+          local.graph_construction_model_arn,
+          "arn:aws:bedrock:*::foundation-model/${var.generation_model_id}",
         ]
       },
       {
@@ -144,8 +166,9 @@ resource "awscc_bedrock_data_source" "chunks" {
     context_enrichment_configuration = {
       type = "BEDROCK_FOUNDATION_MODEL"
       bedrock_foundation_model_configuration = {
-        # Entity extraction is a generative task → use the generation model.
-        model_arn = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/${var.generation_model_id}"
+        # Entity extraction is generative → use the graph-construction model,
+        # resolved to an EU inference-profile ARN (see locals above).
+        model_arn = local.graph_construction_model_arn
         enrichment_strategy_configuration = {
           method = "CHUNK_ENTITY_EXTRACTION"
         }

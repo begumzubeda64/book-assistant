@@ -55,6 +55,22 @@ variable "generation_model_id" {
   default     = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 }
 
+variable "graph_construction_model_arn" {
+  description = <<-EOT
+    ARN of the Bedrock foundation model GraphRAG uses to extract entities and
+    relationships during ingestion (contextEnrichmentConfiguration). In
+    eu-central-1 the Anthropic Claude models are only invokable through a
+    cross-Region inference profile, so this must be an inference-profile ARN
+    (prefix eu.), not a bare foundation-model ARN, otherwise the KB data source
+    fails with "Invalid graph bedrock foundation model provided". Confirm the
+    enabled profile with:
+      aws bedrock list-inference-profiles --region eu-central-1 \
+        --query "inferenceProfileSummaries[?contains(inferenceProfileId,'claude')].[inferenceProfileId,inferenceProfileArn]"
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "jobs_queue_arn" {
   description = "SQS job queue ARN the async agents consume (for the trigger role)."
   type        = string
