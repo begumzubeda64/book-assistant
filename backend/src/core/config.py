@@ -63,7 +63,11 @@ class Settings(BaseSettings):
 
     # Adaptive reading (agent + MCP tier)
     reading_results_bucket_name: str | None = None
-    generation_model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    # Generation model for the reading/discussion agents. In eu-central-1 Claude
+    # is only invokable via an EU cross-Region inference profile (prefix "eu."),
+    # so this is the profile id, not a bare model id. Claude 3.5 Sonnet is EOL on
+    # Bedrock (2026-03-01) and must not be used.
+    generation_model_id: str = "eu.anthropic.claude-sonnet-4-20250514-v1:0"
 
     # AI cost-abuse protection: max expensive AI ops per user per window.
     ai_rate_limit_max: int = 20

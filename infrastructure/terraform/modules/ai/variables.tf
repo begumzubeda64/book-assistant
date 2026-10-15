@@ -50,25 +50,34 @@ variable "agent_image_uris" {
 }
 
 variable "generation_model_id" {
-  description = "Bedrock generation model id used by the reading/discussion agents."
+  description = <<-EOT
+    Bedrock model the reading/discussion agents use for generation (InvokeModel).
+    In eu-central-1 the Anthropic Claude models are only invokable through an EU
+    cross-Region inference profile, so this is the profile id (prefix eu.), e.g.
+    eu.anthropic.claude-sonnet-4-20250514-v1:0. Claude 3.5 Sonnet is end-of-life
+    on Bedrock (EOL 2026-03-01) and must not be used.
+  EOT
   type        = string
-  default     = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+  default     = "eu.anthropic.claude-sonnet-4-20250514-v1:0"
 }
 
 variable "graph_construction_model_arn" {
   description = <<-EOT
-    ARN of the Bedrock foundation model GraphRAG uses to extract entities and
-    relationships during ingestion (contextEnrichmentConfiguration). In
-    eu-central-1 the Anthropic Claude models are only invokable through a
-    cross-Region inference profile, so this must be an inference-profile ARN
-    (prefix eu.), not a bare foundation-model ARN, otherwise the KB data source
-    fails with "Invalid graph bedrock foundation model provided". Confirm the
-    enabled profile with:
-      aws bedrock list-inference-profiles --region eu-central-1 \
-        --query "inferenceProfileSummaries[?contains(inferenceProfileId,'claude')].[inferenceProfileId,inferenceProfileArn]"
+    ARN of the Bedrock model GraphRAG uses to extract entities and relationships
+    during ingestion (contextEnrichmentConfiguration). Two constraints apply in
+    eu-central-1: (1) Claude models are only invokable through an EU cross-Region
+    inference profile, so this must be an inference-profile ARN (prefix eu.), not
+    a bare foundation-model ARN; (2) GraphRAG graph construction only accepts
+    Claude Haiku-family models (Sonnet is rejected with "Invalid graph bedrock
+    foundation model provided"). Confirm enabled profiles with:
+      aws bedrock list-inference-profiles --region eu-central-1
   EOT
   type        = string
-  default     = ""
+
+  validation {
+    condition     = can(regex("^arn:aws:bedrock:[a-z0-9-]+:[0-9]+:inference-profile/", var.graph_construction_model_arn))
+    error_message = "graph_construction_model_arn must be a Bedrock inference-profile ARN (arn:aws:bedrock:<region>:<account>:inference-profile/...)."
+  }
 }
 
 variable "jobs_queue_arn" {

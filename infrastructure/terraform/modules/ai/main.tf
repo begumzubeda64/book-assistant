@@ -15,17 +15,21 @@ data "aws_region" "current" {}
 
 locals {
   # GraphRAG entity extraction (contextEnrichmentConfiguration) must reference a
-  # model that is actually invokable in this Region. In eu-central-1 the
-  # Anthropic Claude models are only reachable through an EU cross-Region
-  # inference profile (ARN prefix "eu."), not a bare foundation-model ARN, so a
-  # foundation-model ARN here fails with "Invalid graph bedrock foundation model
-  # provided". Prefer an explicitly supplied profile ARN; otherwise derive the
-  # account-scoped EU inference-profile ARN from the generation model id.
-  graph_construction_model_arn = (
-    var.graph_construction_model_arn != ""
-    ? var.graph_construction_model_arn
-    : "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:inference-profile/eu.${var.generation_model_id}"
-  )
+  # model that is actually invokable in this Region AND accepted for graph
+  # construction. In eu-central-1 the Anthropic Claude models are only reachable
+  # through an EU cross-Region inference profile (ARN prefix "eu."), not a bare
+  # foundation-model ARN, and GraphRAG only accepts Claude Haiku-family models
+  # for this step (Sonnet is rejected with "Invalid graph bedrock foundation
+  # model provided"). This is therefore a required, explicitly supplied profile
+  # ARN rather than something derived from the generation model.
+  graph_construction_model_arn = var.graph_construction_model_arn
+
+  # Underlying foundation-model id behind the graph-construction inference
+  # profile, e.g. "eu.anthropic.claude-haiku-4-5-20251001-v1:0" ->
+  # "anthropic.claude-haiku-4-5-20251001-v1:0". Used to grant the KB role
+  # InvokeModel on the foundation model the profile routes to.
+  graph_construction_profile_id = element(split("/", local.graph_construction_model_arn), 1)
+  graph_construction_model_id   = replace(local.graph_construction_profile_id, "/^(eu|us|apac|global)[.]/", "")
 }
 
 # --- Prepared-chunk store (ingested content, ownership-scoped by key prefix) ---
@@ -83,19 +87,20 @@ resource "aws_iam_role_policy" "kb_policy" {
       },
       {
         # Embedding model (vectors) + the graph-construction model (GraphRAG
-        # chunk entity extraction during ingestion) are both invoked under this
-        # role. The graph-construction model is an EU cross-Region inference
-        # profile, so per the Bedrock inference-profile prerequisites the role
-        # must be granted both the inference-profile ARN AND the underlying
-        # foundation-model ARN in every destination Region the profile routes to
-        # (eu-central-1, eu-west-1, eu-west-3, eu-north-1) — scoped here with a
-        # Region wildcard on the foundation-model ARN.
+        # chunk entity extraction during ingestion) are invoked under this role.
+        # (The generation model is invoked by the agents, not by the KB role.)
+        # The graph-construction model is an EU cross-Region inference profile,
+        # so per the Bedrock inference-profile prerequisites the role must be
+        # granted BOTH the inference-profile ARN AND the underlying foundation-
+        # model ARN in every destination Region the profile routes to — scoped
+        # here with a Region wildcard on the foundation-model ARN. The underlying
+        # model id is derived from the profile ARN by stripping the "eu." prefix.
         Effect = "Allow"
         Action = ["bedrock:InvokeModel"]
         Resource = [
           var.embedding_model_arn,
           local.graph_construction_model_arn,
-          "arn:aws:bedrock:*::foundation-model/${var.generation_model_id}",
+          "arn:aws:bedrock:*::foundation-model/${local.graph_construction_model_id}",
         ]
       },
       {
