@@ -10,7 +10,8 @@
 #   terraform apply -var-file=../environments/dev/dev.tfvars
 #
 # Then configure the main stack's backend (see ../backend.tf) and run
-# `terraform init` in ../ to migrate state.
+# `terraform init` in ../ to migrate state. State locking is native S3
+# locking (use_lockfile=true) — no DynamoDB lock table is required.
 
 terraform {
   required_version = ">= 1.6"
@@ -35,7 +36,6 @@ provider "aws" {
 
 locals {
   state_bucket = "${var.project}-${var.environment}-tfstate"
-  lock_table   = "${var.project}-${var.environment}-tflock"
 }
 
 resource "aws_s3_bucket" "state" {
@@ -66,16 +66,6 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
-resource "aws_dynamodb_table" "lock" {
-  name         = local.lock_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-}
-
 variable "aws_region" {
   type    = string
   default = "eu-central-1"
@@ -93,8 +83,4 @@ variable "project" {
 
 output "state_bucket" {
   value = aws_s3_bucket.state.id
-}
-
-output "lock_table" {
-  value = aws_dynamodb_table.lock.name
 }
