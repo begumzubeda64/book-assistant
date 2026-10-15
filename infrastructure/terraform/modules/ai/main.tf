@@ -67,9 +67,14 @@ resource "aws_iam_role_policy" "kb_policy" {
         Resource = [aws_s3_bucket.kb_chunks.arn, "${aws_s3_bucket.kb_chunks.arn}/*"]
       },
       {
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
-        Resource = var.embedding_model_arn
+        # Embedding model (vectors) + generation model (GraphRAG chunk entity
+        # extraction during ingestion) are both invoked under this role.
+        Effect = "Allow"
+        Action = ["bedrock:InvokeModel"]
+        Resource = [
+          var.embedding_model_arn,
+          "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/${var.generation_model_id}",
+        ]
       },
       {
         # Explicit Neptune Analytics actions GraphRAG requires (per the Bedrock
@@ -129,6 +134,22 @@ resource "awscc_bedrock_data_source" "chunks" {
     type = "S3"
     s3_configuration = {
       bucket_arn = aws_s3_bucket.kb_chunks.arn
+    }
+  }
+
+  # Required for Neptune Analytics (GraphRAG): a Bedrock foundation model
+  # performs chunk entity extraction to build the graph during ingestion.
+  # In the awscc provider this nests under vector_ingestion_configuration.
+  vector_ingestion_configuration = {
+    context_enrichment_configuration = {
+      type = "BEDROCK_FOUNDATION_MODEL"
+      bedrock_foundation_model_configuration = {
+        # Entity extraction is a generative task → use the generation model.
+        model_arn = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/${var.generation_model_id}"
+        enrichment_strategy_configuration = {
+          method = "CHUNK_ENTITY_EXTRACTION"
+        }
+      }
     }
   }
 }
