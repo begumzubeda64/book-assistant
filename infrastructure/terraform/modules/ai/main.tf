@@ -103,10 +103,14 @@ resource "aws_iam_role_policy" "kb_policy" {
         # the KB validates at data-source creation by calling GetInferenceProfile
         # on the profile ARN. Without this the create fails with "Not authorized
         # to call GetInferenceProfile".
+        # GetInferenceProfile does not support resource-level scoping to a single
+        # profile ARN; an ARN-scoped grant matches nothing and the call is denied
+        # ("Not authorized to call GetInferenceProfile"). It must be "*". This is
+        # a read-only describe action (metadata only, no data/inference access).
         Sid      = "InferenceProfileDescribe"
         Effect   = "Allow"
         Action   = ["bedrock:GetInferenceProfile"]
-        Resource = local.graph_construction_model_arn
+        Resource = "*"
       },
       {
         # Explicit Neptune Analytics actions GraphRAG requires (per the Bedrock
