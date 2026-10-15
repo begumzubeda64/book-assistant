@@ -99,6 +99,16 @@ resource "aws_iam_role_policy" "kb_policy" {
         ]
       },
       {
+        # The graph-construction model is a cross-Region inference profile, which
+        # the KB validates at data-source creation by calling GetInferenceProfile
+        # on the profile ARN. Without this the create fails with "Not authorized
+        # to call GetInferenceProfile".
+        Sid      = "InferenceProfileDescribe"
+        Effect   = "Allow"
+        Action   = ["bedrock:GetInferenceProfile"]
+        Resource = local.graph_construction_model_arn
+      },
+      {
         # Explicit Neptune Analytics actions GraphRAG requires (per the Bedrock
         # KB "vector database in Amazon Neptune Analytics" permissions doc).
         # GetGraph is checked during KB creation; the query actions are used for
