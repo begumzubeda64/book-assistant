@@ -41,6 +41,19 @@ variable "deploy_agents" {
   default     = false
 }
 
+variable "graph_construction_model_arn" {
+  description = <<-EOT
+    ARN of the Bedrock model GraphRAG uses for chunk entity extraction during
+    ingestion. In eu-central-1 the Anthropic Claude models are only invokable
+    through an EU cross-Region inference profile (ARN prefix eu.), so this must
+    be an inference-profile ARN, not a bare foundation-model ARN. Confirm the
+    enabled profiles with:
+      aws bedrock list-inference-profiles --region eu-central-1
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "certificate_arn" {
   description = <<-EOT
     ACM certificate ARN for the ALB HTTPS listener. When empty, the ALB and ECS

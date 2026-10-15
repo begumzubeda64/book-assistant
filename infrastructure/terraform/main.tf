@@ -130,6 +130,9 @@ module "ai" {
   name_prefix = local.name_prefix
   environment = var.environment
 
+  # GraphRAG chunk-entity-extraction model (EU inference-profile ARN).
+  graph_construction_model_arn = var.graph_construction_model_arn
+
   # Agent runtimes (two-stage like compute: enable once agent images are pushed).
   deploy_agents = var.deploy_agents
   agent_image_uris = var.deploy_agents ? {
