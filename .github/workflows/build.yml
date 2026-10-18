@@ -55,15 +55,24 @@ jobs:
           docker build -f "${{ matrix.dockerfile }}" \
             -t "${{ matrix.name }}:${{ github.sha }}" backend
 
+      # Run Trivy via its official container with a pinned version instead of
+      # the aquasecurity/trivy-action GitHub Action. The action's version tags
+      # were force-pushed to malware during a 2026-03 supply-chain compromise
+      # (GHSA-69fq-xp46-6x23), and the old pin (0.28.0) no longer resolves.
+      # Invoking the pinned image directly avoids the action's tag surface
+      # entirely and matches how the scan is validated locally.
       - name: Trivy scan (fail on HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: "${{ matrix.name }}:${{ github.sha }}"
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
-          trivyignores: .trivyignore
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}/.trivyignore:/.trivyignore:ro" \
+            aquasec/trivy:0.67.0 image \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --severity HIGH,CRITICAL \
+            --ignorefile /.trivyignore \
+            --format table \
+            "${{ matrix.name }}:${{ github.sha }}"
 
       - name: Configure AWS credentials (OIDC)
         if: ${{ vars.AWS_ROLE_ARN != '' }}
