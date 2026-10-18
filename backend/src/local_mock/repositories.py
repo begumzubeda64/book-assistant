@@ -102,10 +102,13 @@ class InMemoryConversationRepository:
         messages: list[Message],
         *,
         summary: str | None = None,
+        title: str | None = None,
     ) -> Conversation:
         conversation = self._items[(user_id, conversation_id)]
         conversation.messages.extend(messages)
         if summary is not None:
             conversation.summary = summary
+        if title is not None:
+            conversation.title = title
         conversation.updated_at = datetime.now(UTC)
         return conversation

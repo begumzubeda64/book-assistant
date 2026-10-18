@@ -29,6 +29,7 @@ class ConversationRepository(Protocol):
         messages: list[Message],
         *,
         summary: str | None = None,
+        title: str | None = None,
     ) -> Conversation: ...
 
 
@@ -78,6 +79,7 @@ class DynamoDBConversationRepository:
         messages: list[Message],
         *,
         summary: str | None = None,
+        title: str | None = None,
     ) -> Conversation:
         conversation = await self.get(user_id, conversation_id)
         if conversation is None:
@@ -85,6 +87,8 @@ class DynamoDBConversationRepository:
         conversation.messages.extend(messages)
         if summary is not None:
             conversation.summary = summary
+        if title is not None:
+            conversation.title = title
         from datetime import UTC, datetime
 
         conversation.updated_at = datetime.now(UTC)

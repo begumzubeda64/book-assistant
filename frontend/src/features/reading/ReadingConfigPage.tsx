@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
@@ -36,22 +36,25 @@ function formatWhen(iso: string): string {
   });
 }
 
-type State =
-  | { kind: "form" }
-  | { kind: "generating"; label: string }
+// Generation runs in the background; the page stays interactive so the user can
+// navigate away freely. We track a non-blocking banner instead of a full-page
+// takeover, and surface a "ready" nudge (with a reading id to open) when done.
+type GenState =
+  | { kind: "idle" }
+  | { kind: "generating" }
+  | { kind: "ready"; readingId: string }
   | { kind: "error"; message: string };
 
 export function ReadingConfigPage() {
   const [params] = useSearchParams();
   const bookId = params.get("book") ?? "";
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const book = user ? getUploadedBook(user.userId, bookId) : undefined;
 
   const [mode, setMode] = useState<ReadingMode>("balanced_read");
   const [focus, setFocus] = useState<ReadingFocus>("key_ideas");
-  const [state, setState] = useState<State>({ kind: "form" });
+  const [gen, setGen] = useState<GenState>({ kind: "idle" });
   const [existing, setExisting] = useState<ReadingSummary[]>([]);
 
   const selectedMode = READING_MODES.find((m) => m.value === mode)!;
@@ -68,8 +71,8 @@ export function ReadingConfigPage() {
   }, [refreshExisting]);
 
   async function handleGenerate() {
-    if (!bookId) return;
-    setState({ kind: "generating", label: "Creating your reading…" });
+    if (!bookId || gen.kind === "generating") return;
+    setGen({ kind: "generating" });
     try {
       const job = await generateReading({
         book_id: bookId,
@@ -77,26 +80,35 @@ export function ReadingConfigPage() {
         mode,
         focus,
       });
-      // The backend dedupes on (book, mode, focus, minutes): an identical
-      // request returns the SAME job. If it's already done, go straight to the
-      // existing reading instead of regenerating/waiting. (reading_id == job_id)
+      // Dedupe: identical config returns the same job. If it's already done,
+      // surface it as ready immediately.
       if (job.status === "COMPLETED") {
-        navigate(`/reading/${encodeURIComponent(job.job_id)}`);
+        setGen({ kind: "ready", readingId: job.job_id });
+        refreshExisting();
         return;
       }
-      const final = await pollJob(job.job_id, {
-        intervalMs: 3000,
-        maxAttempts: 100, // ~5 min: generation + model latency
-        onUpdate: () =>
-          setState({ kind: "generating", label: "Creating your reading…" }),
-      });
-      if (final.status === "FAILED") {
-        setState({ kind: "error", message: friendlyJobFailure("reading") });
-        return;
-      }
-      navigate(`/reading/${encodeURIComponent(job.job_id)}`);
+      // Poll in the BACKGROUND. The page stays interactive and we never force a
+      // redirect — the user opens the reading when they choose.
+      pollJob(job.job_id, { intervalMs: 3000, maxAttempts: 100 })
+        .then((final) => {
+          if (final.status === "FAILED") {
+            setGen({ kind: "error", message: friendlyJobFailure("reading") });
+          } else {
+            setGen({ kind: "ready", readingId: job.job_id });
+            refreshExisting();
+          }
+        })
+        .catch((err: unknown) =>
+          setGen({
+            kind: "error",
+            message: friendlyError(
+              err,
+              "We couldn't create this reading. Please try again.",
+            ),
+          }),
+        );
     } catch (err) {
-      setState({
+      setGen({
         kind: "error",
         message: friendlyError(
           err,
@@ -110,21 +122,6 @@ export function ReadingConfigPage() {
     return <ErrorState message="No book selected." />;
   }
 
-  if (state.kind === "generating") {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6">
-        <div className="flex items-center gap-2 text-slate-600">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-          <span className="text-sm">{state.label}</span>
-        </div>
-        <p className="mt-2 text-xs text-slate-400">
-          Shaping the book into a clear, readable piece just for you. This takes
-          a moment — a good time to grab a coffee. ☕
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div>
       <h1 className="text-xl font-semibold">Adaptive Reading</h1>
@@ -132,48 +129,35 @@ export function ReadingConfigPage() {
         {book ? book.title : "Selected book"} — choose how you want to read.
       </p>
 
-      {state.kind === "error" && (
-        <div className="mt-4">
-          <ErrorState
-            message={state.message}
-            onRetry={() => setState({ kind: "form" })}
-          />
+      {/* Non-blocking generation status: the page stays usable; navigate away
+          anytime and open the reading when it's ready. */}
+      {gen.kind === "generating" && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+          <span>
+            Creating your reading in the background — feel free to keep
+            browsing. It&apos;ll appear in your readings below when ready. ☕
+          </span>
         </div>
       )}
-
-      {existing.length > 0 && (
-        <section className="mt-6">
-          <h2 className="text-sm font-medium text-slate-500">
-            Your readings for this book
-          </h2>
-          <ul className="mt-2 space-y-2">
-            {existing.map((r) => (
-              <li
-                key={r.reading_id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-700">
-                    {modeLabel(r.mode)} · {focusLabel(r.focus)}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {r.target_minutes}-minute read · generated{" "}
-                    {formatWhen(r.created_at)}
-                  </p>
-                </div>
-                <Link
-                  to={`/reading/${encodeURIComponent(r.reading_id)}`}
-                  className="shrink-0 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
-                >
-                  View
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-sm text-slate-500">
-            Or create a new reading below.
-          </p>
-        </section>
+      {gen.kind === "ready" && (
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
+          <span className="text-emerald-800">Your reading is ready.</span>
+          <Link
+            to={`/reading/${encodeURIComponent(gen.readingId)}`}
+            className="rounded bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-800"
+          >
+            Read now
+          </Link>
+        </div>
+      )}
+      {gen.kind === "error" && (
+        <div className="mt-4">
+          <ErrorState
+            message={gen.message}
+            onRetry={() => setGen({ kind: "idle" })}
+          />
+        </div>
       )}
 
       <section className="mt-6">
@@ -219,10 +203,45 @@ export function ReadingConfigPage() {
 
       <button
         onClick={() => void handleGenerate()}
-        className="mt-8 rounded-lg bg-slate-900 px-5 py-2.5 font-medium text-white hover:bg-slate-800"
+        disabled={gen.kind === "generating"}
+        className="mt-8 rounded-lg bg-slate-900 px-5 py-2.5 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
       >
-        Generate {selectedMode.minutes}-minute reading
+        {gen.kind === "generating"
+          ? "Generating…"
+          : `Generate ${selectedMode.minutes}-minute reading`}
       </button>
+
+      {existing.length > 0 && (
+        <section className="mt-10 border-t border-slate-200 pt-6">
+          <h2 className="text-sm font-medium text-slate-500">
+            Your readings for this book
+          </h2>
+          <ul className="mt-2 space-y-2">
+            {existing.map((r) => (
+              <li
+                key={r.reading_id}
+                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-700">
+                    {modeLabel(r.mode)} · {focusLabel(r.focus)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {r.target_minutes}-minute read · generated{" "}
+                    {formatWhen(r.created_at)}
+                  </p>
+                </div>
+                <Link
+                  to={`/reading/${encodeURIComponent(r.reading_id)}`}
+                  className="shrink-0 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  View
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

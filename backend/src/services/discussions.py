@@ -21,6 +21,19 @@ from src.models.conversation import (
 )
 from src.repositories.conversations import ConversationRepository
 
+# Max characters for an auto-generated conversation title.
+_TITLE_MAX = 60
+
+
+def _title_from_question(question: str) -> str:
+    """A short, human title derived from the first question."""
+    text = " ".join(question.strip().split())
+    if len(text) <= _TITLE_MAX:
+        return text
+    # Trim to the last word boundary within the limit, then add an ellipsis.
+    clipped = text[:_TITLE_MAX].rsplit(" ", 1)[0]
+    return f"{clipped}…"
+
 
 class DiscussionService:
     def __init__(
@@ -64,6 +77,12 @@ class DiscussionService:
     ) -> Message:
         conversation = await self.get_conversation(user, conversation_id)
 
+        # Title the thread from its first question, so the list shows meaningful
+        # context instead of a generic "Discussion".
+        new_title: str | None = None
+        if not conversation.title and not conversation.messages:
+            new_title = _title_from_question(question)
+
         history = [(m.role.value, m.content) for m in conversation.messages]
         # Pass both the running summary of older turns and the recent turns, so
         # the model has the full conversation context (memory management).
@@ -93,5 +112,6 @@ class DiscussionService:
             conversation_id,
             [user_msg, assistant_msg],
             summary=result.updated_summary,
+            title=new_title,
         )
         return assistant_msg

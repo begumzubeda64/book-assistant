@@ -95,8 +95,7 @@ export function DiscussionStartPage() {
                 {c.title || "Discussion"}
               </p>
               <p className="text-xs text-slate-400">
-                {c.message_count} message{c.message_count === 1 ? "" : "s"} · last
-                active {formatWhen(c.updated_at)}
+                Last active {formatWhen(c.updated_at)}
               </p>
             </div>
             <Link
