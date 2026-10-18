@@ -56,9 +56,42 @@ variable "graph_construction_model_arn" {
 
 variable "certificate_arn" {
   description = <<-EOT
-    ACM certificate ARN for the ALB HTTPS listener. When empty, the ALB and ECS
-    services are not created (provision networking/registry/data layers first,
-    then set this to bring up compute).
+    ACM certificate ARN for the ALB HTTPS listener. When empty (and
+    enable_http_only is false), the ALB and ECS services are not created
+    (provision networking/registry/data layers first, then set this to bring up
+    compute).
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "enable_http_only" {
+  description = <<-EOT
+    Domain-free demo mode. Brings up the ALB + ECS without an ACM certificate:
+    the ALB serves HTTP:80 and a CloudFront distribution (enable_api_cdn) gives
+    the API a real HTTPS *.cloudfront.net URL. Lets the full stack run — browser
+    UI, Cognito hosted login, GraphRAG, agents — without a custom domain. Not
+    for production. Mutually exclusive in spirit with certificate_arn.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_api_cdn" {
+  description = <<-EOT
+    Put a CloudFront distribution in front of the ALB so the API is reachable
+    over HTTPS on a free *.cloudfront.net domain. Intended to accompany
+    enable_http_only.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "cognito_hosted_ui_domain_prefix" {
+  description = <<-EOT
+    Globally-unique prefix for the Cognito hosted-UI domain
+    (<prefix>.auth.<region>.amazoncognito.com). Enables the browser login flow
+    without a custom domain. Empty = no hosted UI.
   EOT
   type        = string
   default     = ""

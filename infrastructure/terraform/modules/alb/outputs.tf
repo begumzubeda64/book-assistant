@@ -14,5 +14,22 @@ output "api_target_group_arn" {
 }
 
 output "https_listener_arn" {
-  value = aws_lb_listener.https.arn
+  description = "HTTPS listener ARN (null in HTTP-only mode)."
+  value       = try(aws_lb_listener.https[0].arn, null)
+}
+
+output "api_cdn_domain" {
+  description = "CloudFront domain for the API (null unless enable_api_cdn)."
+  value       = try(aws_cloudfront_distribution.api[0].domain_name, null)
+}
+
+# Browser-facing base URL for the API. Prefers the CloudFront HTTPS URL; falls
+# back to the ALB HTTPS DNS in HTTPS mode.
+output "api_base_url" {
+  description = "Public HTTPS base URL for the API."
+  value = (
+    var.enable_api_cdn
+    ? "https://${aws_cloudfront_distribution.api[0].domain_name}"
+    : "https://${aws_lb.this.dns_name}"
+  )
 }

@@ -38,8 +38,14 @@ module "ecr" {
 # --- Load balancer + compute (require an ACM certificate) ---
 # Provision networking/ecr/data layers first; set certificate_arn (and push the
 # images) to bring up the ALB + ECS services.
+locals {
+  # Compute (ALB + ECS) comes up when either a real certificate is supplied
+  # (HTTPS mode) or the domain-free HTTP-only demo mode is enabled.
+  enable_compute = var.certificate_arn != "" || var.enable_http_only
+}
+
 module "alb" {
-  count       = var.certificate_arn == "" ? 0 : 1
+  count       = local.enable_compute ? 1 : 0
   source      = "./modules/alb"
   name_prefix = local.name_prefix
 
@@ -47,11 +53,13 @@ module "alb" {
   public_subnet_ids     = module.networking.public_subnet_ids
   alb_security_group_id = module.networking.alb_security_group_id
   certificate_arn       = var.certificate_arn
+  enable_http_only      = var.enable_http_only
+  enable_api_cdn        = var.enable_api_cdn
   app_port              = var.app_port
 }
 
 module "ecs" {
-  count       = var.certificate_arn == "" ? 0 : 1
+  count       = local.enable_compute ? 1 : 0
   source      = "./modules/ecs"
   name_prefix = local.name_prefix
 
@@ -78,10 +86,13 @@ module "ecs" {
   jobs_queue_arn = module.messaging.jobs_queue_arn
 
   api_environment = {
-    APP_ENV                       = var.environment
-    AWS_REGION                    = var.aws_region
-    COGNITO_USER_POOL_ID          = module.cognito.user_pool_id
-    COGNITO_CLIENT_ID             = module.cognito.user_pool_client_id
+    APP_ENV              = var.environment
+    AWS_REGION           = var.aws_region
+    COGNITO_USER_POOL_ID = module.cognito.user_pool_id
+    COGNITO_CLIENT_ID    = module.cognito.user_pool_client_id
+    # Allow the CloudFront-hosted SPA origin to call the API (browser CORS).
+    # pydantic-settings parses list[str] from env as a JSON array.
+    CORS_ALLOW_ORIGINS            = jsonencode(["https://${module.storage.frontend_cloudfront_domain}"])
     UPLOADS_BUCKET_NAME           = module.storage.uploads_bucket_name
     READING_RESULTS_BUCKET_NAME   = module.storage.reading_results_bucket_name
     KB_CHUNK_BUCKET_NAME          = module.ai.kb_chunk_bucket_name
@@ -108,6 +119,12 @@ module "ecs" {
 module "cognito" {
   source      = "./modules/cognito"
   name_prefix = local.name_prefix
+
+  # Hosted-UI login + PKCE callbacks for the deployed CloudFront SPA, so the
+  # real browser login flow works without a custom domain.
+  hosted_ui_domain_prefix = var.cognito_hosted_ui_domain_prefix
+  extra_callback_urls     = ["https://${module.storage.frontend_cloudfront_domain}/auth/callback"]
+  extra_logout_urls       = ["https://${module.storage.frontend_cloudfront_domain}"]
 }
 #
 module "storage" {

@@ -3,6 +3,8 @@
 # Provisions the Cognito User Pool and app client used for authentication. The
 # backend validates JWTs issued by this pool and derives the trusted user_id.
 
+data "aws_region" "current" {}
+
 resource "aws_cognito_user_pool" "this" {
   name = "${var.name_prefix}-users"
 
@@ -55,8 +57,10 @@ resource "aws_cognito_user_pool_client" "this" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["email", "openid", "profile"]
 
-  callback_urls = var.callback_urls
-  logout_urls   = var.logout_urls
+  # Extra callback/logout URLs (e.g. the deployed CloudFront SPA) are merged
+  # with the localhost defaults so both local dev and the hosted demo work.
+  callback_urls = distinct(concat(var.callback_urls, var.extra_callback_urls))
+  logout_urls   = distinct(concat(var.logout_urls, var.extra_logout_urls))
 
   access_token_validity  = 60
   id_token_validity      = 60
@@ -69,4 +73,13 @@ resource "aws_cognito_user_pool_client" "this" {
   }
 
   prevent_user_existence_errors = "ENABLED"
+}
+
+# Hosted-UI domain on the free *.auth.<region>.amazoncognito.com namespace, so
+# the browser login/PKCE flow works without a custom domain. The prefix must be
+# globally unique across all AWS accounts.
+resource "aws_cognito_user_pool_domain" "this" {
+  count        = var.hosted_ui_domain_prefix == "" ? 0 : 1
+  domain       = var.hosted_ui_domain_prefix
+  user_pool_id = aws_cognito_user_pool.this.id
 }

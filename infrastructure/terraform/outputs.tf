@@ -55,13 +55,27 @@ output "ecr_repository_urls" {
 }
 
 output "api_url" {
-  description = "Public API base URL (ALB DNS). Null until certificate_arn is set."
-  value       = try("https://${module.alb[0].alb_dns_name}", null)
+  description = <<-EOT
+    Public HTTPS API base URL. In HTTP-only demo mode this is the API CloudFront
+    *.cloudfront.net URL; in HTTPS mode it is the ALB DNS. Null until compute is
+    created (certificate_arn set or enable_http_only=true).
+  EOT
+  value       = try(module.alb[0].api_base_url, null)
+}
+
+output "api_alb_dns_name" {
+  description = "Raw ALB DNS name (HTTP origin behind the API CloudFront)."
+  value       = try(module.alb[0].alb_dns_name, null)
 }
 
 output "frontend_url" {
   description = "Public frontend URL (CloudFront)."
   value       = "https://${module.storage.frontend_cloudfront_domain}"
+}
+
+output "cognito_hosted_ui_domain" {
+  description = "Cognito hosted-UI domain host for the browser login flow."
+  value       = module.cognito.hosted_ui_domain
 }
 
 output "frontend_bucket_name" {

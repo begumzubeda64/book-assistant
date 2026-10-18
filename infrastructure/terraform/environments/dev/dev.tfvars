@@ -9,3 +9,13 @@ project     = "book-companion"
 # example. Bare foundation-model ARNs are not invokable in eu-central-1, so this
 # is the EU inference-profile ARN.
 graph_construction_model_arn = "arn:aws:bedrock:eu-central-1:169424236454:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+# --- Domain-free demo: full stack over real HTTPS without a custom domain ---
+# ALB serves HTTP:80; a CloudFront distribution gives the API a real HTTPS
+# *.cloudfront.net URL (no mixed content, valid Cognito callback origin).
+enable_http_only = true
+enable_api_cdn   = true
+
+# Cognito hosted-UI login domain (browser login flow). Prefix must be globally
+# unique; the account id keeps it collision-free.
+cognito_hosted_ui_domain_prefix = "book-companion-dev-169424236454"

@@ -12,3 +12,11 @@ output "user_pool_endpoint" {
   description = "Cognito User Pool endpoint (issuer host)."
   value       = aws_cognito_user_pool.this.endpoint
 }
+
+output "hosted_ui_domain" {
+  description = "Cognito hosted-UI domain host (null if not enabled)."
+  value = try(
+    "${aws_cognito_user_pool_domain.this[0].domain}.auth.${data.aws_region.current.name}.amazoncognito.com",
+    null,
+  )
+}
