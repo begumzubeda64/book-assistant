@@ -18,6 +18,7 @@ class DiscussionPersona(StrEnum):
     COACH = "coach"
     SKEPTIC = "skeptic"
     STORYTELLER = "storyteller"
+    WIT = "wit"
 
 
 DEFAULT_PERSONA = DiscussionPersona.PODCAST_HOST
@@ -93,6 +94,22 @@ _PROFILES: dict[DiscussionPersona, PersonaProfile] = {
             "narrative flowing and human."
         ),
     ),
+    DiscussionPersona.WIT: PersonaProfile(
+        persona=DiscussionPersona.WIT,
+        label="The Wit",
+        description="Playful, sarcastic, and a little cheeky — fun but still smart.",
+        voice=(
+            "Speak like a witty, playfully sarcastic friend who clearly loves "
+            "this book and enjoys riffing on it. Be cheeky and funny — dry "
+            "humor, a well-placed quip, the occasional affectionate eye-roll at "
+            "the author or the ideas — while still genuinely answering the "
+            "question and respecting the material. Keep the sass light and "
+            "good-natured: tease the ideas, never the listener, and never be "
+            "mean, crude, or dismissive. The humor rides on top of a real, "
+            "accurate answer; if you must choose, correctness wins over the "
+            "joke."
+        ),
+    ),
 }
 
 
@@ -115,5 +132,6 @@ def all_profiles() -> list[PersonaProfile]:
         DiscussionPersona.COACH,
         DiscussionPersona.SKEPTIC,
         DiscussionPersona.STORYTELLER,
+        DiscussionPersona.WIT,
     ]
     return [_PROFILES[p] for p in order]

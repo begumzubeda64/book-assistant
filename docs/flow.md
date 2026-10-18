@@ -186,7 +186,7 @@ GET /api/v1/discussions/{id}           → ConversationResponse (user-scoped)
   answer reads like a human discussion — it changes delivery, never the facts or
   citations. `GET /api/v1/discussions/personas` lists the options; the persona is
   shown on the discussion list and chat header. Available: Podcast Host
-  (default), Scholar, Coach, Skeptic, Storyteller.
+  (default), Scholar, Coach, Skeptic, Storyteller, The Wit (playful/sarcastic).
 - **Streaming:** the answer is returned whole and revealed progressively in the
   UI (typewriter), not streamed token-by-token end to end (see
   `docs/decisions.md` for the tradeoff).

@@ -518,3 +518,20 @@ ranking/selection pipeline is unchanged; this is a prompt-quality improvement to
 the single generation step.
 
 **Status.** Accepted.
+
+---
+
+## 2026-10-18 — Added a playful "The Wit" discussion persona
+
+**Decision.** Added a sixth discussion persona, **The Wit** (`wit`): a witty,
+playfully sarcastic voice for a more fun discussion. Its voice instructions keep
+the sass light and good-natured — tease the ideas, never the listener; never
+mean/crude; and correctness wins over the joke. It rides on the same grounded,
+citation-respecting answer as every other persona.
+
+**Why.** Requested for a bit of fun. The persona layer is generic (enum +
+profile + `/discussions/personas` endpoint drives the frontend picker), so this
+is a localized addition with no pipeline or frontend changes. The guardrails in
+the voice text keep the humor from undermining accuracy or turning rude.
+
+**Status.** Accepted. Extends the 2026-10-18 personas decision.
