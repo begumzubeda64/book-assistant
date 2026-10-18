@@ -36,36 +36,40 @@ def build_mcp_url(region: str, runtime_arn: str) -> str:
     )
 
 
-class _SigV4Auth:
-    """httpx.Auth that SigV4-signs each request with the task/runtime role."""
+def _make_sigv4_auth(region: str, service: str = _AGENTCORE_SERVICE) -> Any:
+    """Build an httpx.Auth that SigV4-signs each request with the runtime role.
 
-    def __init__(self, region: str, service: str = _AGENTCORE_SERVICE) -> None:
-        import boto3
-        from botocore.auth import SigV4Auth as _Botocore
-        from botocore.awsrequest import AWSRequest
+    Defined as a factory so httpx is imported lazily and the returned object is a
+    genuine httpx.Auth subclass (httpx validates auth via isinstance).
+    """
+    import boto3
+    import httpx
+    from botocore.auth import SigV4Auth as BotocoreSigV4
+    from botocore.awsrequest import AWSRequest
 
-        self._region = region
-        self._service = service
-        self._session = boto3.Session()
-        self._signer_cls = _Botocore
-        self._aws_request_cls = AWSRequest
+    session = boto3.Session()
 
-    def auth_flow(self, request: Any) -> Any:
-        creds = self._session.get_credentials()
-        if creds is None:
-            raise RuntimeError("No AWS credentials available to sign MCP request")
-        aws_req = self._aws_request_cls(
-            method=request.method,
-            url=str(request.url),
-            data=request.content,
-            headers=dict(request.headers),
-        )
-        signer = self._signer_cls(
-            creds.get_frozen_credentials(), self._service, self._region
-        )
-        signer.add_auth(aws_req)
-        request.headers.update(dict(aws_req.headers))
-        yield request
+    class _SigV4Auth(httpx.Auth):
+        # Signing needs the request body, so httpx must buffer it first.
+        requires_request_body = True
+
+        def auth_flow(self, request: httpx.Request) -> Any:
+            creds = session.get_credentials()
+            if creds is None:
+                raise RuntimeError("No AWS credentials available to sign MCP request")
+            aws_req = AWSRequest(
+                method=request.method,
+                url=str(request.url),
+                data=request.content,
+                headers=dict(request.headers),
+            )
+            BotocoreSigV4(
+                creds.get_frozen_credentials(), service, region
+            ).add_auth(aws_req)
+            request.headers.update(dict(aws_req.headers))
+            yield request
+
+    return _SigV4Auth()
 
 
 class McpToolClient:
@@ -100,7 +104,7 @@ class McpToolClient:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
 
-        auth = _SigV4Auth(self._region)
+        auth = _make_sigv4_auth(self._region)
         async with (
             streamablehttp_client(self._url, auth=auth) as (read, write, _),
             ClientSession(read, write) as session,
