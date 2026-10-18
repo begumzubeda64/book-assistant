@@ -42,19 +42,18 @@ locals {
     Version = "2012-10-17"
     Statement = [
       {
+        # Image-pull read actions. Left unscoped by repo ARN: AgentCore's
+        # create-time role validation rejects a wildcard repository resource,
+        # and these are read-only pull operations. GetAuthorizationToken must be
+        # "*" regardless (it is account-global).
         Sid    = "EcrImagePull"
         Effect = "Allow"
         Action = [
+          "ecr:GetAuthorizationToken",
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchCheckLayerAvailability",
         ]
-        Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${var.name_prefix}-*"
-      },
-      {
-        Sid      = "EcrAuthToken"
-        Effect   = "Allow"
-        Action   = ["ecr:GetAuthorizationToken"]
         Resource = "*"
       },
       {
