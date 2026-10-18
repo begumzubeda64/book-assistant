@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { ErrorState, Spinner } from "@/components/states";
 import { friendlyError } from "@/services/errors";
+import { warmup } from "@/services/warmup";
 import { handleCallback } from "@/features/auth/cognito";
 import { useAuth } from "@/features/auth/useAuth";
 
@@ -31,6 +32,9 @@ export function AuthCallbackPage() {
     handleCallback(code)
       .then(() => {
         refreshUser();
+        // Pre-warm the agent runtimes while the user lands on the app, so the
+        // first upload/read/discuss doesn't pay a cold start. Fire-and-forget.
+        warmup();
         navigate("/", { replace: true });
       })
       .catch((err: unknown) =>

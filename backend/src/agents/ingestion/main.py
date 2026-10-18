@@ -60,6 +60,10 @@ def _build_agent(scope_token: str) -> IngestionAgent:
 def handler(payload: dict[str, Any]) -> dict[str, Any]:
     """AgentCore entrypoint: process one BOOK_INGESTION job."""
     configure_logging(get_settings().log_level)
+    # Warm-up ping: return immediately so the runtime is hot for the real
+    # invoke without doing any work.
+    if payload.get("warmup"):
+        return {"status": "warm"}
     try:
         scope_token = payload.get("scope_token", "")
         agent = _build_agent(scope_token)

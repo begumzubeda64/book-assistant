@@ -107,17 +107,22 @@ module "ecs" {
     # Discussion runs in the agent/MCP tier; the API invokes the discussion
     # runtime and mints the scope token. It holds NO Bedrock permissions.
     AGENT_RUNTIME_ARN_DISCUSSION = try(module.ai.discussion_runtime_arn, "")
+    # Ingestion + adaptive ARNs: the API warms all agent runtimes on login.
+    AGENT_RUNTIME_ARN_INGESTION = try(module.ai.agent_runtime_arns["ingestion"], "")
+    AGENT_RUNTIME_ARN_ADAPTIVE  = try(module.ai.agent_runtime_arns["adaptive"], "")
     # Book deletion -> KB cleanup goes through the MCP runtime.
     MCP_RUNTIME_ARN  = try(module.ai.mcp_runtime_arn, "")
     SCOPE_SECRET_ARN = try(module.ai.scope_secret_arn, "")
   }
 
-  # The API invokes the discussion runtime (chat) and the MCP runtime (book
-  # deletion -> KB cleanup). Granted when agents are deployed. No Bedrock data
-  # permissions on the API role.
+  # The API invokes the discussion runtime (chat), the MCP runtime (book
+  # deletion -> KB cleanup), and all agent runtimes for on-login warm-up.
+  # Granted when agents are deployed. No Bedrock data permissions on the API.
   api_invoke_runtime_arns = var.deploy_agents ? compact([
     module.ai.discussion_runtime_arn,
     module.ai.mcp_runtime_arn,
+    module.ai.agent_runtime_arns["ingestion"],
+    module.ai.agent_runtime_arns["adaptive"],
   ]) : []
   api_secret_arns = var.deploy_agents ? compact([module.ai.scope_secret_arn]) : []
 

@@ -50,6 +50,8 @@ def _build_agent(scope_token: str) -> DiscussionAgent:
 def handler(payload: dict[str, Any]) -> dict[str, Any]:
     """AgentCore entrypoint: answer one discussion turn (grounded)."""
     configure_logging(get_settings().log_level)
+    if payload.get("warmup"):
+        return {"status": "warm"}
     try:
         agent = _build_agent(payload.get("scope_token", ""))
         history = [tuple(h) for h in payload.get("history", [])]

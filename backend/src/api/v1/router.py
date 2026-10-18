@@ -17,6 +17,7 @@ from src.api.v1 import (
     reading,
     recommendations,
     uploads,
+    warmup,
 )
 
 api_router = APIRouter()
@@ -27,3 +28,4 @@ api_router.include_router(discussions.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(jobs.router)
 api_router.include_router(progress.router)
+api_router.include_router(warmup.router)

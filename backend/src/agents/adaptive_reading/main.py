@@ -59,6 +59,8 @@ def _build_agent(scope_token: str) -> AdaptiveReadingAgent:
 def handler(payload: dict[str, Any]) -> dict[str, Any]:
     """AgentCore entrypoint: process one ADAPTIVE_READING job."""
     configure_logging(get_settings().log_level)
+    if payload.get("warmup"):
+        return {"status": "warm"}
     try:
         scope_token = payload.get("scope_token", "")
         agent = _build_agent(scope_token)

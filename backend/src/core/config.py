@@ -89,6 +89,19 @@ class Settings(BaseSettings):
     # API role entirely (tools only through the tool tier).
     agent_runtime_arn_discussion: str | None = None
 
+    @property
+    def warmup_runtime_arns(self) -> list[str]:
+        """Agent runtime ARNs the API warms on login (skip unset ones)."""
+        return [
+            a
+            for a in (
+                self.agent_runtime_arn_ingestion,
+                self.agent_runtime_arn_adaptive,
+                self.agent_runtime_arn_discussion,
+            )
+            if a
+        ]
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False
