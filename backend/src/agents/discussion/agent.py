@@ -47,6 +47,7 @@ class DiscussionAgentProtocol(Protocol):
         history: list[tuple[str, str]] | None = None,
         summary: str | None = None,
         current_title: str | None = None,
+        persona: str | None = None,
     ) -> DiscussionAnswer: ...
 
 
@@ -76,6 +77,7 @@ class RemoteDiscussionAgent:
         history: list[tuple[str, str]] | None = None,
         summary: str | None = None,
         current_title: str | None = None,
+        persona: str | None = None,
     ) -> DiscussionAnswer:
         from src.mcp_server.scope import mint_scope_token
 
@@ -91,6 +93,7 @@ class RemoteDiscussionAgent:
                 "history": [list(h) for h in (history or [])],
                 "summary": summary,
                 "current_title": current_title,
+                "persona": persona,
                 "scope_token": token,
             },
         )
@@ -123,8 +126,10 @@ class DiscussionAgent:
         history: list[tuple[str, str]] | None = None,
         summary: str | None = None,
         current_title: str | None = None,
+        persona: str | None = None,
     ) -> DiscussionAnswer:
         from src.agents.discussion import nodes
+        from src.agents.discussion.personas import profile_for
 
         turns = history or []
         state: dict[str, object] = {
@@ -133,6 +138,7 @@ class DiscussionAgent:
             "question": question,
             "history": turns,
             "summary": summary,
+            "persona_voice": profile_for(persona).voice,
         }
         result = self._graph.invoke(state)
 

@@ -476,3 +476,45 @@ small per-change overhead to keep the docs honest; the hook can't force judgment
 only prompt the check.
 
 **Status.** Accepted.
+
+---
+
+## 2026-10-18 — Discussion personas (human podcast voice by default)
+
+**Decision.** Discussions answer in a natural, human "podcast discussion" voice
+rather than a formal summary. A conversation carries an optional `persona`
+(voice/style) chosen at creation, defaulting to **Podcast Host**. Options:
+Podcast Host (default), Scholar, Coach, Skeptic, Storyteller
+(`agents/discussion/personas.py`). The persona's voice is injected into the
+grounded prompt; the grounding and citation rules are unchanged — persona changes
+*delivery*, never the facts. `GET /api/v1/discussions/personas` lists them; the
+persona is stored on the conversation and surfaced on the discussion list and the
+chat header.
+
+**Why.** The default answers read like a careful source summary, which felt
+formal and un-human. A persona layer makes the discussion engaging and
+conversational while keeping it grounded. A small, fixed set of distinct voices
+(selectable, optional, with a sensible default) gives variety without
+uncontrolled prompt sprawl. The grounded prompt itself was also rewritten to
+instruct a direct, conversational, specifics-first answer rather than a report.
+
+**Status.** Accepted.
+
+---
+
+## 2026-10-18 — Adaptive reading prompt preserves the book's specifics
+
+**Decision.** The adaptive-reading generation prompt (`agents/adaptive_reading/
+nodes.py::build_prompt`) now explicitly instructs the model to keep the book's
+concrete specifics (named people, examples, data, distinctive terminology) and
+the author's framing, to use plain direct language, and to avoid vague filler —
+instead of the earlier terse "condense into coherent prose, preserve meaning".
+
+**Why.** Output sometimes read generically because the prompt asked only for a
+faithful condensed summary without protecting the specifics that make a given
+book distinctive. Preserving concrete detail and the author's line of reasoning
+is what stops the reading from sounding like a template. The deterministic
+ranking/selection pipeline is unchanged; this is a prompt-quality improvement to
+the single generation step.
+
+**Status.** Accepted.

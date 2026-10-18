@@ -48,6 +48,8 @@ class Conversation(BaseModel):
     conversation_id: str
     book_id: str
     title: str | None = None
+    # Discussion persona (voice/style of the answers); None → default host.
+    persona: str | None = None
     messages: list[Message] = Field(default_factory=list)
     # Running summary of older turns, maintained once the thread grows past the
     # verbatim window, so long conversations stay within the model context

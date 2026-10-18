@@ -93,7 +93,7 @@ def test_prompt_instructs_grounding_and_includes_context() -> None:
         question="q",
         history=[("user", "earlier question"), ("assistant", "earlier answer")],
     )
-    assert "ground every factual claim in the SOURCE MATERIAL" in gen.answer_prompt
+    assert "Base every factual claim on the SOURCE MATERIAL" in gen.answer_prompt
     assert "earlier question" in gen.answer_prompt
     assert "b:p10:s0" in gen.answer_prompt
 

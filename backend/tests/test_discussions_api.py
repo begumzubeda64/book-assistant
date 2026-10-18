@@ -24,13 +24,18 @@ class FakeDiscussionService:
         self.conversations: dict[str, Conversation] = {}
 
     async def create_conversation(
-        self, user: AuthenticatedUser, book_id: str, title: str | None
+        self,
+        user: AuthenticatedUser,
+        book_id: str,
+        title: str | None,
+        persona: str | None = None,
     ) -> Conversation:
         conv = Conversation(
             user_id=user.user_id,
             conversation_id="c1",
             book_id=book_id,
             title=title,
+            persona=persona,
         )
         self.conversations["c1"] = conv
         return conv

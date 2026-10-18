@@ -24,8 +24,14 @@ def build_grounded_prompt(
     passages: list[RetrievedPassage],
     history: list[tuple[str, str]],
     summary: str | None = None,
+    persona_voice: str | None = None,
 ) -> str:
-    """Build a grounded answer prompt from summary + recent turns + sources."""
+    """Build a grounded answer prompt from summary + recent turns + sources.
+
+    The answer should read like a natural, human discussion about the book (a
+    persona sets the exact voice), while staying strictly grounded in the
+    retrieved source material — voice changes the delivery, never the facts.
+    """
     recent = history[-CONTEXT_TURN_LIMIT:]
     history_block = "\n".join(f"{role}: {content}" for role, content in recent)
     source_block = "\n\n".join(
@@ -34,12 +40,30 @@ def build_grounded_prompt(
     summary_block = (
         f"EARLIER CONVERSATION SUMMARY:\n{summary}\n\n" if summary else ""
     )
+    voice = persona_voice or (
+        "Speak like a warm, curious podcast host talking the book through with "
+        "the listener — conversational and human, not a formal summary."
+    )
     return (
-        "You are a book companion answering questions about a book. Use the "
-        "earlier conversation summary and recent turns for context, but ground "
-        "every factual claim in the SOURCE MATERIAL below. If the sources do "
-        "not contain the answer, say you cannot find it in the book. Do not "
-        "invent facts or citations.\n\n"
+        "You are co-hosting a relaxed, intelligent conversation about a book, "
+        "like a great podcast. Talk WITH the listener, not AT them.\n\n"
+        f"VOICE:\n{voice}\n\n"
+        "HOW TO RESPOND:\n"
+        "- Sound like a real person speaking, not a report. Use natural, "
+        "flowing sentences and a human rhythm; contractions are good.\n"
+        "- Answer the question directly first, then add the interesting colour "
+        "— the 'why it matters', a connection, or a telling example.\n"
+        "- Weave in the book's own specifics (names, examples, phrasing) rather "
+        "than generic paraphrase. Do not pad with filler or restate the "
+        "question.\n"
+        "- Avoid bullet-point dumps and headings unless the listener asks for a "
+        "list; prefer conversational prose.\n\n"
+        "GROUNDING (non-negotiable):\n"
+        "- Base every factual claim on the SOURCE MATERIAL below. You may be "
+        "lively and add natural connective framing, but never invent facts, "
+        "quotes, or citations.\n"
+        "- If the sources don't cover the question, say so plainly and "
+        "conversationally rather than guessing.\n\n"
         f"{summary_block}"
         f"RECENT CONVERSATION:\n{history_block or '(none)'}\n\n"
         f"SOURCE MATERIAL:\n{source_block or '(no relevant sources found)'}\n\n"

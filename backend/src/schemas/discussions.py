@@ -15,6 +15,8 @@ class CreateConversationRequest(APIModel):
 
     book_id: str = Field(..., min_length=1)
     title: str | None = Field(default=None, max_length=200)
+    # Optional discussion persona (voice/style). None → default podcast host.
+    persona: str | None = Field(default=None, max_length=40)
 
 
 class PostMessageRequest(APIModel):
@@ -42,6 +44,7 @@ class ConversationResponse(APIModel):
     conversation_id: str
     book_id: str
     title: str | None = None
+    persona: str | None = None
     messages: list[MessageResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -58,9 +61,23 @@ class ConversationSummary(APIModel):
     conversation_id: str
     book_id: str
     title: str | None = None
+    persona: str | None = None
     message_count: int = 0
     updated_at: datetime
 
 
 class ConversationList(APIModel):
     items: list[ConversationSummary] = Field(default_factory=list)
+
+
+class PersonaOption(APIModel):
+    """A selectable discussion persona (voice/style)."""
+
+    id: str
+    label: str
+    description: str
+
+
+class PersonaList(APIModel):
+    items: list[PersonaOption] = Field(default_factory=list)
+    default: str

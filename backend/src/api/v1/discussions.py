@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
+from src.agents.discussion.personas import DEFAULT_PERSONA, all_profiles
 from src.api.dependencies import (
     CurrentUser,
     DiscussionServiceDep,
@@ -26,10 +27,24 @@ from src.schemas.discussions import (
     ConversationSummary,
     CreateConversationRequest,
     MessageResponse,
+    PersonaList,
+    PersonaOption,
     PostMessageRequest,
 )
 
 router = APIRouter(prefix="/discussions", tags=["discussions"])
+
+
+@router.get("/personas", response_model=PersonaList)
+async def list_personas() -> PersonaList:
+    """List the selectable discussion personas (voice/style options)."""
+    return PersonaList(
+        items=[
+            PersonaOption(id=p.persona.value, label=p.label, description=p.description)
+            for p in all_profiles()
+        ],
+        default=DEFAULT_PERSONA.value,
+    )
 
 
 @router.get("", response_model=ConversationList)
@@ -46,6 +61,7 @@ async def list_discussions(
                 conversation_id=c.conversation_id,
                 book_id=c.book_id,
                 title=c.title,
+                persona=c.persona,
                 message_count=len(c.messages),
                 updated_at=c.updated_at,
             )
@@ -64,7 +80,7 @@ async def create_discussion(
 ) -> ConversationCreatedResponse:
     """Start a discussion conversation for a book."""
     conversation = await service.create_conversation(
-        user, request.book_id, request.title
+        user, request.book_id, request.title, request.persona
     )
     return ConversationCreatedResponse(
         conversation_id=conversation.conversation_id,

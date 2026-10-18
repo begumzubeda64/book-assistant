@@ -6,7 +6,11 @@ import { Markdown } from "@/components/Markdown";
 import { ErrorState, Spinner } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
 import { friendlyError } from "@/services/errors";
-import { getConversation, postMessage } from "@/services/discussions";
+import {
+  getConversation,
+  listPersonas,
+  postMessage,
+} from "@/services/discussions";
 import { getUploadedBook } from "@/stores/uploadedBooks";
 import type { Citation, DiscussionMessage } from "@/types/discussions";
 
@@ -122,6 +126,7 @@ export function DiscussionPage() {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [bookId, setBookId] = useState<string>("");
   const [title, setTitle] = useState<string | null>(null);
+  const [personaLabel, setPersonaLabel] = useState<string | null>(null);
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
@@ -144,6 +149,17 @@ export function DiscussionPage() {
       setMessages(conv.messages);
       setBookId(conv.book_id);
       setTitle(conv.title ?? null);
+      // Map the persona id to its human label for the header (best-effort).
+      if (conv.persona) {
+        listPersonas()
+          .then(({ items }) => {
+            const match = items.find((p) => p.id === conv.persona);
+            setPersonaLabel(match?.label ?? null);
+          })
+          .catch(() => {});
+      } else {
+        setPersonaLabel(null);
+      }
       setLoad({ kind: "loaded" });
     } catch (err) {
       setLoad({
@@ -249,9 +265,16 @@ export function DiscussionPage() {
         to={`/discussions/new?book=${encodeURIComponent(bookId)}`}
         label="Back to discussions"
       />
-      <h1 className="mt-2 truncate text-lg font-semibold">
-        {title || "New discussion"}
-      </h1>
+      <div className="mt-2 flex items-center gap-2">
+        <h1 className="truncate text-lg font-semibold">
+          {title || "New discussion"}
+        </h1>
+        {personaLabel && (
+          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            {personaLabel}
+          </span>
+        )}
+      </div>
       <p className="truncate text-sm text-slate-400">
         {bookTitle ?? "Your book"}
       </p>

@@ -39,6 +39,7 @@ def build_discussion_graph(
             state["passages"],
             state.get("history", []),
             state.get("summary"),
+            state.get("persona_voice"),
         )
         answer = generator.generate(prompt=prompt, max_words=ANSWER_WORD_BUDGET)
         return {

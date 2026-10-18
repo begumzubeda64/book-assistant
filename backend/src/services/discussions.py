@@ -33,13 +33,21 @@ class DiscussionService:
         self._agent = agent
 
     async def create_conversation(
-        self, user: AuthenticatedUser, book_id: str, title: str | None
+        self,
+        user: AuthenticatedUser,
+        book_id: str,
+        title: str | None,
+        persona: str | None = None,
     ) -> Conversation:
+        from src.agents.discussion.personas import profile_for
+
         conversation = Conversation(
             user_id=user.user_id,
             conversation_id=str(uuid.uuid4()),
             book_id=book_id,
             title=title,
+            # Normalize to a known persona id (defaults safely if unknown).
+            persona=profile_for(persona).persona.value,
         )
         return await self._repo.create(conversation)
 
@@ -76,6 +84,8 @@ class DiscussionService:
             # Pass the current title so the agent can keep refreshing it while
             # it's still a placeholder (replace it once a real topic appears).
             current_title=conversation.title,
+            # Persona sets the answer's voice/style (default handled downstream).
+            persona=conversation.persona,
         )
 
         user_msg = Message(

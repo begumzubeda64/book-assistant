@@ -4,8 +4,24 @@ import type {
   ConversationCreated,
   CreateConversationRequest,
   DiscussionMessage,
+  PersonaOption,
   PostMessageRequest,
 } from "@/types/discussions";
+
+// Personas are static for the session; cache after first fetch.
+let personaCache: { items: PersonaOption[]; default: string } | null = null;
+
+export async function listPersonas(): Promise<{
+  items: PersonaOption[];
+  default: string;
+}> {
+  if (personaCache) return personaCache;
+  const res = await apiFetch<{ items: PersonaOption[]; default: string }>(
+    "/api/v1/discussions/personas",
+  );
+  personaCache = res;
+  return res;
+}
 
 export function createConversation(
   request: CreateConversationRequest,
@@ -28,6 +44,7 @@ export interface ConversationSummary {
   conversation_id: string;
   book_id: string;
   title: string | null;
+  persona: string | null;
   message_count: number;
   updated_at: string;
 }

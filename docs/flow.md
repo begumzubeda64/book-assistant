@@ -180,6 +180,13 @@ GET /api/v1/discussions/{id}           → ConversationResponse (user-scoped)
   replaces it; then it stabilizes. The frontend shows an instant question-derived
   title on send, replaced by the agent's title on the response (see
   `docs/decisions.md`).
+- **Persona:** a conversation carries an optional `persona` (voice/style), chosen
+  at creation and defaulting to a natural podcast host. The persona's voice is
+  injected into the grounded prompt (`agents/discussion/personas.py`) so the
+  answer reads like a human discussion — it changes delivery, never the facts or
+  citations. `GET /api/v1/discussions/personas` lists the options; the persona is
+  shown on the discussion list and chat header. Available: Podcast Host
+  (default), Scholar, Coach, Skeptic, Storyteller.
 - **Streaming:** the answer is returned whole and revealed progressively in the
   UI (typewriter), not streamed token-by-token end to end (see
   `docs/decisions.md` for the tradeoff).

@@ -21,6 +21,7 @@ export interface Conversation {
   conversation_id: string;
   book_id: string;
   title?: string | null;
+  persona?: string | null;
   messages: DiscussionMessage[];
   created_at: string;
   updated_at: string;
@@ -34,6 +35,13 @@ export interface ConversationCreated {
 export interface CreateConversationRequest {
   book_id: string;
   title?: string | null;
+  persona?: string | null;
+}
+
+export interface PersonaOption {
+  id: string;
+  label: string;
+  description: string;
 }
 
 export interface PostMessageRequest {

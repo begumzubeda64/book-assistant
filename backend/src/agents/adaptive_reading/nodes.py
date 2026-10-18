@@ -190,11 +190,25 @@ def build_prompt(
     }[mode]
     source_block = "\n\n".join(f"[{c.chunk_id}] {c.text}" for c in chunks)
     return (
-        "You are condensing book content into coherent, readable prose.\n"
-        f"Focus: {focus.value}. Cover {depth}.\n"
-        f"Target about {budget_words} words. Write flowing prose, not bullet "
-        "points or truncation. Preserve meaning and context.\n"
-        "Use only the provided source material below.\n\n"
+        "You are condensing this specific book into coherent, engaging prose "
+        "that preserves what makes it worth reading — not a generic overview.\n\n"
+        f"FOCUS: {focus.value}. Cover {depth}.\n"
+        f"LENGTH: about {budget_words} words of flowing prose (no bullet points, "
+        "no headings unless the source is clearly structured that way, no "
+        "truncation).\n\n"
+        "WRITE IT WELL:\n"
+        "- Keep the book's CONCRETE specifics: the actual names, examples, "
+        "stories, data, and distinctive terminology it uses. These specifics are "
+        "what stop a reading from sounding generic — do not flatten them into "
+        "vague generalities.\n"
+        "- Preserve the author's framing and line of reasoning, so the argument "
+        "still builds the way it does in the book.\n"
+        "- Use plain, direct language. Avoid filler and empty phrases like "
+        "'this book explores various important themes' — say what it actually "
+        "says.\n"
+        "- Read as one connected piece, not a list of disconnected points.\n\n"
+        "GROUNDING: Use ONLY the provided source material below; do not add "
+        "outside facts, and do not invent specifics.\n\n"
         f"SOURCE MATERIAL:\n{source_block}"
     )
 

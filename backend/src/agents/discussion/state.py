@@ -16,6 +16,7 @@ class DiscussionState(TypedDict, total=False):
     question: str
     history: list[tuple[str, str]]  # (role, content) prior turns
     summary: str | None  # running summary of older turns (memory management)
+    persona_voice: str | None  # persona voice instructions for the answer
 
     # Populated by nodes
     passages: list[RetrievedPassage]
