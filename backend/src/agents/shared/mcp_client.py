@@ -138,7 +138,6 @@ class McpToolClient:
         q: queue.Queue[tuple[str, Any]] = queue.Queue()
 
         async def _run() -> None:
-
             from mcp import ClientSession
             from mcp.client.streamable_http import streamablehttp_client
 
@@ -155,18 +154,20 @@ class McpToolClient:
                     ClientSession(read, write) as session,
                 ):
                     await session.initialize()
-                    await session.call_tool(
+                    result = await session.call_tool(
                         name,
                         arguments,
                         meta={"scope_token": self._scope_token},
                         progress_callback=_on_progress,
                     )
-                q.put(("done", None))
+                # The tool ALSO returns the complete text. Progress
+                # notifications (our live deltas) may not survive the AgentCore
+                # MCP transport (the server->client GET SSE channel can 405), so
+                # the final return value is the source of truth for the answer.
+                final_text = _unwrap(result)
+                q.put(("final", final_text if isinstance(final_text, str) else ""))
             except Exception as exc:  # surfaced to the consumer
                 q.put(("error", exc))
-            finally:
-                # anyio/asyncio cleanup is handled by asyncio.run below.
-                pass
 
         def _thread() -> None:
             import asyncio
@@ -175,15 +176,29 @@ class McpToolClient:
 
         worker = threading.Thread(target=_thread, daemon=True)
         worker.start()
+        delivered = ""
         while True:
             kind, value = q.get()
             if kind == "delta":
+                delivered += value
                 yield value
             elif kind == "error":
                 worker.join(timeout=1)
                 raise value
-            else:  # done
+            else:  # final: reconcile against the complete returned text
                 worker.join(timeout=1)
+                final_text = value or ""
+                if not final_text:
+                    return
+                # Emit whatever of the complete answer wasn't already delivered
+                # as live deltas, so the answer is never empty or truncated even
+                # if progress notifications didn't arrive.
+                if final_text.startswith(delivered):
+                    remainder = final_text[len(delivered) :]
+                    if remainder:
+                        yield remainder
+                elif not delivered:
+                    yield final_text
                 return
 
 

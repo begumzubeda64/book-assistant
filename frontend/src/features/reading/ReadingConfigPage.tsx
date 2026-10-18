@@ -68,8 +68,21 @@ export function ReadingConfigPage() {
       .catch(() => setExisting([]));
   }, [bookId]);
 
+  // Refresh on mount and whenever the tab regains focus, so a reading that
+  // finishes while the user is elsewhere appears in the list on return (the
+  // list only shows completed readings — an in-progress one has no result yet).
   useEffect(() => {
     refreshExisting();
+    const onFocus = () => refreshExisting();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshExisting();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refreshExisting]);
 
   async function handleGenerate() {

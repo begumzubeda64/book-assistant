@@ -584,3 +584,34 @@ the answer). The buffered `generate_text` tool and non-streaming `answer` path
 are retained for the adaptive-reading agent and as a fallback.
 
 **Status.** Accepted. Supersedes "Discussion streaming is a frontend reveal".
+
+---
+
+## 2026-10-18 — Streaming falls back to the tool return value (MCP progress not delivered over AgentCore)
+
+**Decision.** `McpToolClient.call_stream` now treats the streaming tool's RETURN
+VALUE (the complete text) as the source of truth, emitting any portion not
+already delivered as live progress deltas. Progress notifications are still used
+for live deltas when they arrive, but are no longer required for a correct
+answer.
+
+**Why (root cause).** With the first streaming build the discussion answer came
+back EMPTY. Agent logs showed the runtime did stream and did call the MCP tool,
+but the MCP server→client GET SSE channel repeatedly returned
+`405 Method Not Allowed` ("GET stream disconnected, reconnecting") — i.e.
+AgentCore's MCP transport does not deliver the tool's progress notifications
+(our token deltas) back to the agent. `call_stream` had been yielding ONLY those
+progress deltas, so zero deltas arrived and the answer was empty. Capturing the
+tool's return value and reconciling against delivered deltas makes the answer
+correct whether or not progress notifications get through.
+
+**Resulting behavior (honest).** In the current AgentCore MCP environment,
+progress deltas do not arrive, so the answer is emitted as effectively one chunk
+and the UI's paced reveal animates it smoothly — still real server-side
+generation (Bedrock `invoke_model_with_response_stream` runs in the MCP tier),
+but not token-granular on the wire end-to-end. If/when AgentCore delivers MCP
+progress notifications, finer live deltas light up automatically with no code
+change. The buffered-to-UI reveal remains comfortable to read either way.
+
+**Status.** Accepted. Fixes the empty-answer regression from the initial
+streaming build.

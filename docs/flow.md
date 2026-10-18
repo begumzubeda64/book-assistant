@@ -198,7 +198,11 @@ GET /api/v1/discussions/{id}           → ConversationResponse (user-scoped)
   detached, shielded task, so navigating away still completes and saves the
   answer server-side; the completed answer shows from the DB on return. The
   non-streaming `POST .../messages` and buffered `generate_text` remain as a
-  fallback and for the adaptive-reading agent. (See `docs/decisions.md`.)
+  fallback and for the adaptive-reading agent. Note: AgentCore's MCP transport
+  currently does not deliver the tool's progress notifications (the live
+  deltas), so `call_stream` falls back to the tool's full RETURN VALUE and the
+  UI paces that reveal — real server-side generation, but not token-granular on
+  the wire until AgentCore delivers MCP progress. (See `docs/decisions.md`.)
 - Config: `CONVERSATIONS_TABLE_NAME`, `KNOWLEDGE_BASE_ID`, `GENERATION_MODEL_ID`.
 
 ## Ingestion pipeline (implemented — agent tier)
