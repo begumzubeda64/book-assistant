@@ -74,6 +74,36 @@ function MessageBubble({ message }: { message: DiscussionMessage }) {
 // How many most-recent messages to show before "load older".
 const RECENT_WINDOW = 10;
 
+// Placeholder titles the agent uses before a real topic is captured. While the
+// title is still one of these, an instant client-derived title may replace it.
+const GENERIC_TITLES = new Set([
+  "",
+  "general chat",
+  "discussion",
+  "new discussion",
+]);
+
+function isGenericTitle(title: string | null | undefined): boolean {
+  return GENERIC_TITLES.has((title ?? "").trim().toLowerCase());
+}
+
+/**
+ * A quick, client-side title derived from the question, shown the instant a
+ * message is sent so the header updates in real time. It's a stop-gap: the
+ * agent's smarter intent-based title replaces it when the answer returns.
+ */
+function quickTitleFromQuestion(question: string): string {
+  const cleaned = question
+    .replace(/[^\p{L}\p{N}\s'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "New discussion";
+  const words = cleaned.split(" ").slice(0, 5).join(" ");
+  const title = words.length > 48 ? `${words.slice(0, 48).trim()}…` : words;
+  // Capitalize the first letter for a tidy label.
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 export function DiscussionPage() {
   const { conversationId } = useParams();
   const { user } = useAuth();
@@ -133,17 +163,28 @@ export function DiscussionPage() {
     setMessages((prev) => [...prev, optimistic]);
     setQuestion("");
 
+    // Real-time feedback: if the conversation has no real title yet, show an
+    // instant title derived from the question right away. The agent's smarter
+    // intent-based title replaces it when the answer returns below.
+    const titleBeforeSend = title;
+    if (isGenericTitle(titleBeforeSend)) {
+      setTitle(quickTitleFromQuestion(text));
+    }
+
     try {
       await postMessage(conversationId, { question: text });
       // Reconcile with the server so the thread reflects the persisted history
       // (both the question and the grounded answer), not just local optimism.
-      // The title is (re)generated over the opening turns, so refresh it too.
+      // The agent's intent-based title is authoritative and replaces the
+      // instant client title; if the agent didn't set one this turn, keep the
+      // instant title we already showed rather than clearing it.
       const conv = await getConversation(conversationId);
       setMessages(conv.messages);
-      setTitle(conv.title ?? null);
+      if (conv.title) setTitle(conv.title);
     } catch (err) {
-      // Roll back the optimistic question on failure.
+      // Roll back the optimistic question and the instant title on failure.
       setMessages((prev) => prev.filter((m) => m.message_id !== optimistic.message_id));
+      setTitle(titleBeforeSend);
       setQuestion(text);
       setAskError(friendlyError(err, "We couldn't get an answer. Please try again."));
     } finally {
