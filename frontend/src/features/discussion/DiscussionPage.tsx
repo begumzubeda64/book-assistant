@@ -140,6 +140,14 @@ export function DiscussionPage() {
   const bookTitle =
     (user && bookId && getUploadedBook(user.userId, bookId)?.title) || null;
 
+  // The answer to the last turn is still being generated server-side when the
+  // most recent persisted message is the user's (no assistant reply yet). This
+  // covers returning to the chat mid-generation: the question shows, with a
+  // "generating…" indicator, even though this browser isn't the one streaming.
+  const lastMessage = messages[messages.length - 1];
+  const awaitingAnswer =
+    !streaming && !asking && lastMessage?.role === "user";
+
   const fetchConversation = useCallback(async () => {
     if (!conversationId) return;
     setLoad({ kind: "loading" });
@@ -175,6 +183,22 @@ export function DiscussionPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, asking, streamShown]);
+
+  // If we returned mid-generation (last message is the user's, answer still
+  // being produced server-side), poll the thread so the answer appears once it
+  // lands — without a manual refresh.
+  useEffect(() => {
+    if (!awaitingAnswer || !conversationId) return;
+    const timer = window.setInterval(() => {
+      getConversation(conversationId)
+        .then((conv) => {
+          setMessages(conv.messages);
+          if (conv.title) setTitle(conv.title);
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [awaitingAnswer, conversationId]);
 
   // Paced reveal loop: SSE deltas land in streamBufferRef; this moves a few
   // characters at a time into the visible text at a steady, readable rate so
@@ -333,11 +357,13 @@ export function DiscussionPage() {
             streaming
           />
         )}
-        {/* Waiting for the first token. */}
-        {asking && (!streaming || streamShown.length === 0) && (
+        {/* Waiting for the first token (this session), OR returning to a turn
+            whose answer is still generating server-side. */}
+        {((asking && (!streaming || streamShown.length === 0)) ||
+          awaitingAnswer) && (
           <div className="flex justify-start">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2">
-              <Spinner label="Thinking…" />
+              <Spinner label="Generating the answer…" />
             </div>
           </div>
         )}

@@ -139,7 +139,21 @@ class DiscussionService:
         import asyncio
 
         conversation = await self.get_conversation(user, conversation_id)
+        # History for the agent is the thread BEFORE this question (captured now,
+        # before we persist the question, so it isn't duplicated in context).
         history = [(m.role.value, m.content) for m in conversation.messages]
+
+        # Persist the user's question IMMEDIATELY, so if they navigate away and
+        # come back mid-generation the thread still shows their message (and the
+        # UI can render a "generating…" state for the pending answer).
+        user_msg = Message(
+            message_id=str(uuid.uuid4()),
+            role=MessageRole.USER,
+            content=question,
+        )
+        await self._repo.append_messages(
+            user.user_id, conversation_id, [user_msg]
+        )
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -147,11 +161,8 @@ class DiscussionService:
         async def _persist_and_final(final: dict[str, Any]) -> dict[str, Any]:
             answer_text = str(final.get("answer") or "")
             citations: list[Any] = list(final.get("citations") or [])
-            user_msg = Message(
-                message_id=str(uuid.uuid4()),
-                role=MessageRole.USER,
-                content=question,
-            )
+            # Append ONLY the assistant answer — the user message is already
+            # persisted above.
             assistant_msg = Message(
                 message_id=str(uuid.uuid4()),
                 role=MessageRole.ASSISTANT,
@@ -161,7 +172,7 @@ class DiscussionService:
             await self._repo.append_messages(
                 user.user_id,
                 conversation_id,
-                [user_msg, assistant_msg],
+                [assistant_msg],
                 summary=final.get("updated_summary"),  # type: ignore[arg-type]
                 title=final.get("title"),  # type: ignore[arg-type]
             )

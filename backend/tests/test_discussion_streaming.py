@@ -90,8 +90,12 @@ class _FakeRepo:
     async def append_messages(
         self, user_id, conversation_id, messages, *, summary=None, title=None
     ) -> Conversation:
-        self.appended = messages
-        self._conv.title = title
+        # Accumulate across calls (the user question is appended first, then the
+        # assistant answer), mirroring the real repo.
+        self.appended.extend(messages)
+        self._conv.messages.extend(messages)
+        if title is not None:
+            self._conv.title = title
         return self._conv
 
 

@@ -645,3 +645,24 @@ cause; (3) makes the pending-reading UX durable like the uploaded-books and
 reading-started local registries already are.
 
 **Status.** Accepted.
+
+---
+
+## 2026-10-18 — Persist the user question immediately in streaming turns
+
+**Decision.** The streaming discussion path (`post_message_stream`) now persists
+the user's question to DynamoDB immediately when the turn starts, and appends
+only the assistant answer when generation completes — two separate
+`append_messages` calls instead of one at the end. The history passed to the
+agent is captured before persisting the question, so it isn't duplicated in
+context. On the client, returning to a thread whose last persisted message is the
+user's renders a "generating…" bubble and polls until the answer lands.
+
+**Why.** Previously both messages were saved together only at the end of
+generation. If the user sent a message and navigated away before it finished,
+coming back showed an EMPTY chat — not even their own question — because nothing
+was persisted yet. Saving the question up front means the thread always reflects
+what the user said, and the pending answer is shown as a generating state rather
+than a blank screen.
+
+**Status.** Accepted.
