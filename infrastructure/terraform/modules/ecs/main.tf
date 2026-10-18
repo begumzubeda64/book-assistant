@@ -154,6 +154,14 @@ resource "aws_ecs_task_definition" "api" {
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.api_task.arn
 
+  # Images are built arm64 (AgentCore requires arm64; we use one arch across the
+  # stack). Fargate must be told to run on Graviton or it defaults to X86_64 and
+  # the task fails to start.
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
   container_definitions = jsonencode([
     {
       name         = "api"
@@ -243,6 +251,12 @@ resource "aws_ecs_task_definition" "dispatcher" {
   memory                   = 512
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.dispatcher_task.arn
+
+  # Reuses the arm64 API image -> must run on Graviton Fargate.
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
 
   container_definitions = jsonencode([
     {
