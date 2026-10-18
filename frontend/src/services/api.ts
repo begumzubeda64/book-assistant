@@ -16,6 +16,17 @@ export function setTokenProvider(provider: TokenProvider): void {
   tokenProvider = provider;
 }
 
+// The auth layer registers a handler so a 401 (expired/invalid session) clears
+// the local user and routes back to the login screen, instead of leaving a
+// stale "logged in" nav bar with a dead session.
+type UnauthorizedHandler = () => void;
+
+let onUnauthorized: UnauthorizedHandler = () => {};
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
+  onUnauthorized = handler;
+}
+
 export interface ApiError {
   code: string;
   message: string;
@@ -54,6 +65,10 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      // Session is gone or invalid — let the auth layer reset to logged-out.
+      onUnauthorized();
+    }
     let error: ApiError = { code: "HTTP_ERROR", message: response.statusText };
     try {
       const body = (await response.json()) as { error?: ApiError };

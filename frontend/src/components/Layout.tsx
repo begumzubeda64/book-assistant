@@ -11,7 +11,7 @@ const NAV = [
 const LOCAL_MOCK = import.meta.env.VITE_LOCAL_MOCK === "true";
 
 export function Layout() {
-  const { user, signOut, mode } = useAuth();
+  const { user, signOut, mode, isAuthenticated } = useAuth();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -50,13 +50,26 @@ export function Layout() {
                 local dev
               </span>
             )}
-            <span className="text-slate-500">{user?.email ?? user?.userId}</span>
-            <button
-              onClick={signOut}
-              className="rounded border border-slate-300 px-2 py-1 text-slate-600 hover:bg-slate-100"
-            >
-              Sign out
-            </button>
+            {isAuthenticated ? (
+              <>
+                <span className="text-slate-500">
+                  {user?.email ?? user?.userId}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="rounded border border-slate-300 px-2 py-1 text-slate-600 hover:bg-slate-100"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <NavLink
+                to="/login"
+                className="rounded border border-slate-300 px-2 py-1 text-slate-600 hover:bg-slate-100"
+              >
+                Sign in
+              </NavLink>
+            )}
           </div>
         </div>
       </header>
