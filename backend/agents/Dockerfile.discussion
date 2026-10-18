@@ -1,0 +1,45 @@
+# Discussion agent image (LangGraph on Amazon Bedrock AgentCore Runtime).
+#
+# One of three ISOLATED agent images (decisions.md). Invoked directly by the API
+# for short interactive turns. GraphRAG retrieval and generation go through the
+# MCP tool server; neither this agent nor the API holds direct Bedrock perms.
+#
+# Build context is backend/:  docker build -f agents/Dockerfile.discussion .
+
+FROM python:3.11-slim AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --extra agents
+
+COPY src ./src
+COPY README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra agents
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN groupadd --system agent && useradd --system --gid agent --home /app agent
+
+WORKDIR /app
+
+COPY --from=builder --chown=agent:agent /app/.venv /app/.venv
+COPY --chown=agent:agent src ./src
+
+USER agent
+
+EXPOSE 8080
+
+CMD ["python", "-m", "src.agents.discussion.main"]

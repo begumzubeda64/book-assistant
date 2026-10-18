@@ -1,0 +1,54 @@
+# Local development stack for Book Companion.
+#
+# Approach B (local-first): the backend runs against local/mocked AWS so the
+# app can be developed and tested without a real AWS environment. Real AWS
+# resources are provisioned later via Terraform (infrastructure/).
+#
+# Services:
+#   backend      - FastAPI app (python:3.11-slim), reload enabled for dev
+#   dynamodb     - DynamoDB Local (application state / jobs)
+#   localstack   - S3 + SQS emulation for local upload/job flows
+#
+# Bedrock / Knowledge Bases / Neptune Analytics GraphRAG and AgentCore are not
+# emulated locally; they are exercised through adapters that are mocked in dev
+# and swapped for real clients once infrastructure exists.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: book-companion-backend
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      AWS_REGION: eu-central-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      DYNAMODB_ENDPOINT_URL: http://dynamodb:8000
+      AWS_ENDPOINT_URL: http://localstack:4566
+      LOG_LEVEL: INFO
+    volumes:
+      - ./backend/src:/app/src
+    command: >
+      uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - dynamodb
+      - localstack
+
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    container_name: book-companion-dynamodb
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+    ports:
+      - "8001:8000"
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: book-companion-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,sqs
+      DEFAULT_REGION: eu-central-1

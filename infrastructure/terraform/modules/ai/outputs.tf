@@ -1,0 +1,44 @@
+output "knowledge_base_id" {
+  description = "Bedrock Knowledge Base ID (KNOWLEDGE_BASE_ID for the agents)."
+  value       = awscc_bedrock_knowledge_base.graphrag.knowledge_base_id
+}
+
+output "knowledge_base_data_source_id" {
+  description = "KB S3 data source ID (KNOWLEDGE_BASE_DATA_SOURCE_ID)."
+  value       = awscc_bedrock_data_source.chunks.data_source_id
+}
+
+output "kb_chunk_bucket_name" {
+  description = "Prepared-chunk bucket name (KB_CHUNK_BUCKET_NAME)."
+  value       = aws_s3_bucket.kb_chunks.id
+}
+
+output "kb_chunk_bucket_arn" {
+  description = "Prepared-chunk bucket ARN (for IAM policies)."
+  value       = aws_s3_bucket.kb_chunks.arn
+}
+
+output "graphrag_graph_arn" {
+  description = "Neptune Analytics graph ARN."
+  value       = aws_neptunegraph_graph.graphrag.arn
+}
+
+output "agent_runtime_arns" {
+  description = "Map of agent name -> AgentCore runtime ARN (empty until deploy_agents)."
+  value       = { for k, r in awscc_bedrockagentcore_runtime.agent : k => r.agent_runtime_arn }
+}
+
+output "mcp_runtime_arn" {
+  description = "MCP tool-server AgentCore runtime ARN (null until deployed)."
+  value       = try(awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn, null)
+}
+
+output "discussion_runtime_arn" {
+  description = "Discussion AgentCore runtime ARN (null until deployed)."
+  value       = try(awscc_bedrockagentcore_runtime.agent["discussion"].agent_runtime_arn, null)
+}
+
+output "scope_secret_arn" {
+  description = "Scope-signing secret ARN (for the dispatcher/API to read)."
+  value       = try(aws_secretsmanager_secret.scope[0].arn, null)
+}

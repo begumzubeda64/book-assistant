@@ -1,0 +1,83 @@
+"""Discussion API schemas."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import Field
+
+from src.models.conversation import MessageRole
+from src.schemas.base import APIModel
+
+
+class CreateConversationRequest(APIModel):
+    """Start a discussion about an authorized book."""
+
+    book_id: str = Field(..., min_length=1)
+    title: str | None = Field(default=None, max_length=200)
+    # Optional discussion persona (voice/style). None → default podcast host.
+    persona: str | None = Field(default=None, max_length=40)
+
+
+class PostMessageRequest(APIModel):
+    """Ask a question in a conversation."""
+
+    question: str = Field(..., min_length=1, max_length=2000)
+
+
+class CitationResponse(APIModel):
+    chunk_id: str | None = None
+    chapter_title: str | None = None
+    section: str | None = None
+    page: int | None = None
+
+
+class MessageResponse(APIModel):
+    message_id: str
+    role: MessageRole
+    content: str
+    citations: list[CitationResponse] = Field(default_factory=list)
+    created_at: datetime
+
+
+class ConversationResponse(APIModel):
+    conversation_id: str
+    book_id: str
+    title: str | None = None
+    persona: str | None = None
+    messages: list[MessageResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationCreatedResponse(APIModel):
+    conversation_id: str
+    book_id: str
+
+
+class ConversationSummary(APIModel):
+    """Lightweight entry for listing a book's conversations."""
+
+    conversation_id: str
+    book_id: str
+    title: str | None = None
+    persona: str | None = None
+    message_count: int = 0
+    updated_at: datetime
+
+
+class ConversationList(APIModel):
+    items: list[ConversationSummary] = Field(default_factory=list)
+
+
+class PersonaOption(APIModel):
+    """A selectable discussion persona (voice/style)."""
+
+    id: str
+    label: str
+    description: str
+
+
+class PersonaList(APIModel):
+    items: list[PersonaOption] = Field(default_factory=list)
+    default: str

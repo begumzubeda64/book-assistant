@@ -1,0 +1,88 @@
+name: Build & Push Images
+
+# Builds all five container images (API, MCP tool server, and the three isolated
+# agents), security-scans them with Trivy, and pushes to ECR via OIDC.
+#
+# AWS steps are gated on the AWS_ROLE_ARN repository variable, so the build +
+# scan still run (and gate merges) even before AWS is configured; the push only
+# happens once the OIDC role exists.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for AWS OIDC
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  build:
+    name: Build, scan, push
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: backend/Dockerfile
+            repo: book-companion-api
+          - name: mcp
+            dockerfile: backend/Dockerfile.mcp
+            repo: book-companion-mcp
+          - name: agent-ingestion
+            dockerfile: backend/agents/Dockerfile.ingestion
+            repo: book-companion-agent-ingestion
+          - name: agent-adaptive
+            dockerfile: backend/agents/Dockerfile.adaptive_reading
+            repo: book-companion-agent-adaptive
+          - name: agent-discussion
+            dockerfile: backend/agents/Dockerfile.discussion
+            repo: book-companion-agent-discussion
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build -f "${{ matrix.dockerfile }}" \
+            -t "${{ matrix.name }}:${{ github.sha }}" backend
+
+      - name: Trivy scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "${{ matrix.name }}:${{ github.sha }}"
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag & push to ECR
+        if: ${{ vars.AWS_ROLE_ARN != '' }}
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/${{ matrix.repo }}"
+          docker tag "${{ matrix.name }}:${{ github.sha }}" "$IMAGE:${{ github.sha }}"
+          docker tag "${{ matrix.name }}:${{ github.sha }}" "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"

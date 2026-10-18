@@ -1,0 +1,50 @@
+# MCP tool-server image (AgentCore Runtime).
+#
+# The ISOLATED tool tier (decisions.md, security.md). Runs the allowlisted,
+# scope-enforced tools as a stateless streamable-HTTP MCP server on
+# 0.0.0.0:8000/mcp — the contract AgentCore Runtime expects for MCP runtimes.
+# All AWS data permissions live on THIS runtime's execution role; the agents
+# hold none, so the tools are reachable only through this server.
+#
+# Build context is backend/:  docker build -f Dockerfile.mcp .
+
+# ---- Builder: resolve and install deps (incl. the agents extra) ----
+FROM python:3.11-slim AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --extra agents
+
+COPY src ./src
+COPY README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra agents
+
+# ---- Runtime: minimal, non-root ----
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN groupadd --system mcp && useradd --system --gid mcp --home /app mcp
+
+WORKDIR /app
+
+COPY --from=builder --chown=mcp:mcp /app/.venv /app/.venv
+COPY --chown=mcp:mcp src ./src
+
+USER mcp
+
+# AgentCore MCP contract: stateless streamable-HTTP on 0.0.0.0:8000/mcp.
+EXPOSE 8000
+
+CMD ["python", "-m", "src.mcp_server.main"]
