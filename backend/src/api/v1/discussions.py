@@ -10,9 +10,12 @@ references. Conversations are scoped to the authenticated user (requirement 1.3)
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import StreamingResponse
 
 from src.agents.discussion.personas import DEFAULT_PERSONA, all_profiles
 from src.api.dependencies import (
@@ -103,6 +106,47 @@ async def post_message(
     """Ask a question and get a grounded answer with source references."""
     answer = await service.post_message(user, conversation_id, request.question)
     return MessageResponse.model_validate(answer, from_attributes=True)
+
+
+@router.post(
+    "/{conversation_id}/messages/stream",
+    dependencies=[Depends(enforce_ai_rate_limit("discussion_message"))],
+)
+async def post_message_stream(
+    user: CurrentUser,
+    service: DiscussionServiceDep,
+    conversation_id: str,
+    request: PostMessageRequest,
+) -> StreamingResponse:
+    """Stream a grounded answer as Server-Sent Events.
+
+    Emits ``data: {"type":"delta","text":...}`` frames as tokens arrive, then a
+    final ``data: {"type":"final", message_id, title, citations}``. The full
+    message is persisted server-side when generation completes, so navigating
+    away does not lose the answer (it appears on return from the stored thread).
+    """
+
+    async def event_stream() -> AsyncIterator[bytes]:
+        # Flush an initial comment so the connection opens immediately and any
+        # intermediary starts streaming rather than buffering for first bytes.
+        yield b": open\n\n"
+        try:
+            async for event in service.post_message_stream(
+                user, conversation_id, request.question
+            ):
+                yield f"data: {json.dumps(event)}\n\n".encode()
+        except Exception:
+            yield b'data: {"type":"error"}\n\n'
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)

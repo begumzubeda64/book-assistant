@@ -9,7 +9,7 @@ import { friendlyError } from "@/services/errors";
 import {
   getConversation,
   listPersonas,
-  postMessage,
+  streamMessage,
 } from "@/services/discussions";
 import { getUploadedBook } from "@/stores/uploadedBooks";
 import type { Citation, DiscussionMessage } from "@/types/discussions";
@@ -52,18 +52,14 @@ function CitationList({ citations }: { citations: Citation[] }) {
 
 function MessageBubble({
   message,
-  // When set, the assistant message is mid-stream: render only this many
-  // characters and a caret, and hold citations until the reveal completes.
-  revealChars,
+  // While true, show a caret and hold citations (the answer is still streaming).
+  streaming = false,
 }: {
   message: DiscussionMessage;
-  revealChars?: number;
+  streaming?: boolean;
 }) {
   const isUser = message.role === "user";
-  const streaming = revealChars != null && revealChars < message.content.length;
-  const shown = streaming
-    ? message.content.slice(0, revealChars)
-    : message.content;
+  const shown = message.content;
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -132,10 +128,13 @@ export function DiscussionPage() {
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  // Streaming reveal: the assistant answer arrives whole from the backend, then
-  // we reveal it progressively (typewriter) so it reads like it's streaming.
-  const [streamId, setStreamId] = useState<string | null>(null);
-  const [streamChars, setStreamChars] = useState(0);
+  // Real streaming: text arrives from the backend over SSE. We buffer the
+  // incoming tokens and reveal them at a comfortable, readable pace (not in
+  // instant bursts) via a render loop.
+  const [streaming, setStreaming] = useState(false);
+  const [streamShown, setStreamShown] = useState("");
+  const streamBufferRef = useRef("");
+  const streamDoneRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const bookTitle =
@@ -175,35 +174,48 @@ export function DiscussionPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, asking, streamChars]);
+  }, [messages, asking, streamShown]);
 
-  // Typewriter reveal of the streaming assistant message: advance the visible
-  // character count on an interval until the whole answer is shown, then stop.
+  // Paced reveal loop: SSE deltas land in streamBufferRef; this moves a few
+  // characters at a time into the visible text at a steady, readable rate so
+  // bursts don't dump instantly. When the backend is done and the buffer is
+  // drained, it reconciles the thread from the DB (authoritative) and stops.
+  const finishStream = useCallback(async () => {
+    setStreaming(false);
+    setStreamShown("");
+    streamBufferRef.current = "";
+    streamDoneRef.current = false;
+    if (!conversationId) return;
+    try {
+      const conv = await getConversation(conversationId);
+      setMessages(conv.messages);
+      if (conv.title) setTitle(conv.title);
+    } catch {
+      // Keep whatever is shown; a later load will reconcile.
+    }
+  }, [conversationId]);
+
   useEffect(() => {
-    if (!streamId) return;
-    const target = messages.find((m) => m.message_id === streamId);
-    if (!target) {
-      setStreamId(null);
-      return;
-    }
-    const total = target.content.length;
-    if (streamChars >= total) {
-      setStreamId(null); // fully revealed
-      return;
-    }
-    // Reveal a few characters per tick; scale step to length so long answers
-    // don't take too long, short ones still feel typed.
-    const step = Math.max(2, Math.ceil(total / 180));
-    const timer = window.setTimeout(() => {
-      setStreamChars((n) => Math.min(total, n + step));
-    }, 16);
-    return () => window.clearTimeout(timer);
-  }, [streamId, streamChars, messages]);
+    if (!streaming) return;
+    // ~45 chars/sec feels like comfortable reading, not a data dump.
+    const timer = window.setInterval(() => {
+      const buffered = streamBufferRef.current;
+      if (buffered.length > 0) {
+        const step = Math.min(3, buffered.length);
+        setStreamShown((s) => s + buffered.slice(0, step));
+        streamBufferRef.current = buffered.slice(step);
+      } else if (streamDoneRef.current) {
+        window.clearInterval(timer);
+        void finishStream();
+      }
+    }, 60);
+    return () => window.clearInterval(timer);
+  }, [streaming, finishStream]);
 
   async function ask(event: FormEvent) {
     event.preventDefault();
     const text = question.trim();
-    if (!text || !conversationId || asking) return;
+    if (!text || !conversationId || asking || streaming) return;
 
     setAskError(null);
     setAsking(true);
@@ -218,38 +230,47 @@ export function DiscussionPage() {
     setMessages((prev) => [...prev, optimistic]);
     setQuestion("");
 
-    // Real-time feedback: if the conversation has no real title yet, show an
-    // instant title derived from the question right away. The agent's smarter
-    // intent-based title replaces it when the answer returns below.
+    // Instant title feedback while no real title exists yet.
     const titleBeforeSend = title;
     if (isGenericTitle(titleBeforeSend)) {
       setTitle(quickTitleFromQuestion(text));
     }
 
+    // Prepare the streaming view.
+    streamBufferRef.current = "";
+    streamDoneRef.current = false;
+    setStreamShown("");
+    setStreaming(true);
+
     try {
-      await postMessage(conversationId, { question: text });
-      // Reconcile with the server so the thread reflects the persisted history
-      // (both the question and the grounded answer), not just local optimism.
-      // The agent's intent-based title is authoritative and replaces the
-      // instant client title; if the agent didn't set one this turn, keep the
-      // instant title we already showed rather than clearing it.
-      const conv = await getConversation(conversationId);
-      setMessages(conv.messages);
-      if (conv.title) setTitle(conv.title);
-      // Begin streaming the just-arrived assistant answer (last assistant msg).
-      const lastAssistant = [...conv.messages]
-        .reverse()
-        .find((m) => m.role === "assistant");
-      if (lastAssistant) {
-        setStreamId(lastAssistant.message_id);
-        setStreamChars(0);
-      }
+      await streamMessage(conversationId, { question: text }, (ev) => {
+        if (ev.type === "delta") {
+          streamBufferRef.current += ev.text;
+        } else if (ev.type === "final") {
+          if (ev.title) setTitle(ev.title);
+          // Signal the reveal loop to drain the buffer then reconcile.
+          streamDoneRef.current = true;
+        } else {
+          streamDoneRef.current = true;
+          setAskError("We couldn't get an answer. Please try again.");
+        }
+      });
+      // In case the stream closed without a final frame, make sure we finish.
+      streamDoneRef.current = true;
     } catch (err) {
-      // Roll back the optimistic question and the instant title on failure.
-      setMessages((prev) => prev.filter((m) => m.message_id !== optimistic.message_id));
+      // Roll back the optimistic question + instant title on failure.
+      setMessages((prev) =>
+        prev.filter((m) => m.message_id !== optimistic.message_id),
+      );
       setTitle(titleBeforeSend);
       setQuestion(text);
-      setAskError(friendlyError(err, "We couldn't get an answer. Please try again."));
+      setStreaming(false);
+      setStreamShown("");
+      streamBufferRef.current = "";
+      streamDoneRef.current = false;
+      setAskError(
+        friendlyError(err, "We couldn't get an answer. Please try again."),
+      );
     } finally {
       setAsking(false);
     }
@@ -297,13 +318,23 @@ export function DiscussionPage() {
           </div>
         )}
         {(showAll ? messages : messages.slice(-RECENT_WINDOW)).map((m) => (
-          <MessageBubble
-            key={m.message_id}
-            message={m}
-            revealChars={m.message_id === streamId ? streamChars : undefined}
-          />
+          <MessageBubble key={m.message_id} message={m} />
         ))}
-        {asking && !streamId && (
+        {/* Live streaming assistant bubble (real tokens, paced reveal). */}
+        {streaming && streamShown.length > 0 && (
+          <MessageBubble
+            message={{
+              message_id: "streaming",
+              role: "assistant",
+              content: streamShown,
+              citations: [],
+              created_at: new Date().toISOString(),
+            }}
+            streaming
+          />
+        )}
+        {/* Waiting for the first token. */}
+        {asking && (!streaming || streamShown.length === 0) && (
           <div className="flex justify-start">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2">
               <Spinner label="Thinking…" />

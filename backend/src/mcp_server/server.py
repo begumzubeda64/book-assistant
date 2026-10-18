@@ -20,6 +20,7 @@ Allowlisted tools:
 - ingest_to_knowledge_base : ingest prepared chunks into the KB (GraphRAG)
 - get_book_content         : read prepared chunks for an authorized book
 - generate_text            : foundation-model text generation
+- generate_text_stream     : streaming generation (deltas via progress)
 - store_reading_result     : persist an adaptive-reading result
 - graphrag_retrieve        : user-scoped GraphRAG retrieval
 """
@@ -49,6 +50,7 @@ TOOL_ALLOWLIST = frozenset(
         "ingest_to_knowledge_base",
         "get_book_content",
         "generate_text",
+        "generate_text_stream",
         "store_reading_result",
         "graphrag_retrieve",
         "delete_book_from_knowledge_base",
@@ -177,6 +179,53 @@ def create_mcp_server(tools: ToolBundle, *, scope_secret: str) -> Any:
         # so an unauthenticated caller cannot burn model spend.
         _scope_from_context(ctx, scope_secret)
         return tools.generation.generate(prompt=prompt, max_words=max_words)
+
+    @server.tool(name="generate_text_stream")
+    async def generate_text_stream(
+        prompt: str, max_words: int, ctx: Context
+    ) -> str:
+        """Stream text generation: deltas are sent as progress notifications
+        (``message``), and the full text is returned as the final value.
+
+        A client that supplies a progress callback receives the tokens live; a
+        client that does not still gets the complete answer from the return
+        value. Streaming support is detected at call time — if the injected
+        generator can't stream, this falls back to a single buffered delta.
+        """
+        _scope_from_context(ctx, scope_secret)
+        gen = tools.generation
+        stream = getattr(gen, "generate_stream", None)
+        if not callable(stream):
+            # No streaming support: one buffered result (still correct).
+            text = gen.generate(prompt=prompt, max_words=max_words)
+            await ctx.report_progress(progress=1.0, message=text)
+            return text
+
+        # Bridge the blocking Bedrock stream (run in a worker thread) back to
+        # the event loop, forwarding each delta as a progress notification so a
+        # progress-callback client receives tokens live.
+        import anyio
+        from anyio.from_thread import BlockingPortal
+
+        pieces: list[str] = []
+
+        async with BlockingPortal() as portal:
+
+            def _collect() -> None:
+                for index, piece in enumerate(
+                    stream(prompt=prompt, max_words=max_words), start=1
+                ):
+                    pieces.append(piece)
+                    portal.call(
+                        ctx.report_progress,
+                        float(index),
+                        None,
+                        piece,
+                    )
+
+            await anyio.to_thread.run_sync(_collect)
+
+        return "".join(pieces)
 
     @server.tool(name="store_reading_result")
     def store_reading_result(reading_id: str, payload: str, ctx: Context) -> str:

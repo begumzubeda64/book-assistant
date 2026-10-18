@@ -8,6 +8,7 @@ persistence is handled by the calling service.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -31,6 +32,23 @@ class DiscussionAnswer:
     title: str | None = None
 
 
+@dataclass
+class DiscussionStreamEvent:
+    """One event in a streamed discussion turn.
+
+    - ``type="delta"``: ``text`` carries an incremental piece of the answer.
+    - ``type="final"``: the turn is complete; ``answer`` is the full text and
+      ``citations``/``title``/``updated_summary`` carry the derived metadata.
+    """
+
+    type: str
+    text: str = ""
+    answer: str = ""
+    citations: list[dict[str, object]] | None = None
+    updated_summary: str | None = None
+    title: str | None = None
+
+
 class DiscussionAgentProtocol(Protocol):
     """The discussion-agent surface the service depends on.
 
@@ -49,6 +67,18 @@ class DiscussionAgentProtocol(Protocol):
         current_title: str | None = None,
         persona: str | None = None,
     ) -> DiscussionAnswer: ...
+
+    def answer_stream(
+        self,
+        *,
+        user_id: str,
+        book_id: str,
+        question: str,
+        history: list[tuple[str, str]] | None = None,
+        summary: str | None = None,
+        current_title: str | None = None,
+        persona: str | None = None,
+    ) -> Iterator[DiscussionStreamEvent]: ...
 
 
 class RemoteDiscussionAgent:
@@ -104,6 +134,76 @@ class RemoteDiscussionAgent:
             title=result.get("title"),
         )
 
+    def answer_stream(
+        self,
+        *,
+        user_id: str,
+        book_id: str,
+        question: str,
+        history: list[tuple[str, str]] | None = None,
+        summary: str | None = None,
+        current_title: str | None = None,
+        persona: str | None = None,
+    ) -> Iterator[DiscussionStreamEvent]:
+        """Stream the turn from the discussion runtime (SSE), yielding events.
+
+        Mirrors ``answer`` but requests a streamed response: yields ``delta``
+        events as tokens arrive and a ``final`` event with citations/title/
+        summary. Requires the invoker to expose ``invoke_stream``.
+        """
+        from src.mcp_server.scope import mint_scope_token
+
+        token = mint_scope_token(
+            user_id=user_id, job_id="discussion", secret=self._scope_secret
+        )
+        invoke_stream = getattr(self._invoker, "invoke_stream", None)
+        if not callable(invoke_stream):
+            # No streaming transport: degrade to a single final event.
+            result = self.answer(
+                user_id=user_id,
+                book_id=book_id,
+                question=question,
+                history=history,
+                summary=summary,
+                current_title=current_title,
+                persona=persona,
+            )
+            yield DiscussionStreamEvent(
+                type="final",
+                answer=result.answer,
+                citations=result.citations,
+                updated_summary=result.updated_summary,
+                title=result.title,
+            )
+            return
+
+        for event in invoke_stream(
+            self._runtime_arn,
+            {
+                "user_id": user_id,
+                "book_id": book_id,
+                "question": question,
+                "history": [list(h) for h in (history or [])],
+                "summary": summary,
+                "current_title": current_title,
+                "persona": persona,
+                "stream": True,
+                "scope_token": token,
+            },
+        ):
+            etype = event.get("type")
+            if etype == "delta":
+                yield DiscussionStreamEvent(type="delta", text=event.get("text", ""))
+            elif etype == "final":
+                yield DiscussionStreamEvent(
+                    type="final",
+                    answer=event.get("answer", ""),
+                    citations=event.get("citations") or [],
+                    updated_summary=event.get("updated_summary"),
+                    title=event.get("title"),
+                )
+            # ignore unknown/error frames here; the service handles completion
+
 
 class DiscussionAgent:
     def __init__(
@@ -115,6 +215,7 @@ class DiscussionAgent:
         from src.agents.discussion.graph import build_discussion_graph
 
         self._graph = build_discussion_graph(retriever, generator)
+        self._retriever = retriever
         self._generator = generator
 
     def answer(
@@ -175,3 +276,91 @@ class DiscussionAgent:
             updated_summary=updated_summary,
             title=title,
         )
+
+    def answer_stream(
+        self,
+        *,
+        user_id: str,
+        book_id: str,
+        question: str,
+        history: list[tuple[str, str]] | None = None,
+        summary: str | None = None,
+        current_title: str | None = None,
+        persona: str | None = None,
+    ) -> Iterator[DiscussionStreamEvent]:
+        """Stream a grounded answer: yield ``delta`` events as tokens arrive,
+        then a single ``final`` event with citations/title/summary.
+
+        Retrieval + grounded prompt are identical to ``answer``; only generation
+        is streamed. Title/summary depend on the full turn, so they are derived
+        after the answer completes and ride on the final event.
+        """
+        from src.agents.discussion import nodes
+        from src.agents.discussion.personas import profile_for
+
+        turns = history or []
+        passages = self._retriever.retrieve(
+            user_id=user_id, book_id=book_id, query=question
+        )
+        prompt = nodes.build_grounded_prompt(
+            question, passages, turns, summary, profile_for(persona).voice
+        )
+
+        stream = getattr(self._generator, "generate_stream", None)
+        answer_parts: list[str] = []
+        if callable(stream):
+            for piece in stream(prompt=prompt, max_words=400):
+                answer_parts.append(piece)
+                yield DiscussionStreamEvent(type="delta", text=piece)
+        else:
+            # Fallback: no streaming generator — emit the whole answer once.
+            whole = self._generator.generate(prompt=prompt, max_words=400)
+            answer_parts.append(whole)
+            yield DiscussionStreamEvent(type="delta", text=whole)
+
+        answer = "".join(answer_parts).strip()
+        citations = nodes.passages_to_citations(passages)
+        updated_summary, title = self._derive_summary_and_title(
+            turns=turns,
+            summary=summary,
+            question=question,
+            current_title=current_title,
+        )
+        yield DiscussionStreamEvent(
+            type="final",
+            answer=answer,
+            citations=citations,
+            updated_summary=updated_summary,
+            title=title,
+        )
+
+    def _derive_summary_and_title(
+        self,
+        *,
+        turns: list[tuple[str, str]],
+        summary: str | None,
+        question: str,
+        current_title: str | None,
+    ) -> tuple[str | None, str | None]:
+        """Shared post-answer derivation of the rolling summary and title."""
+        from src.agents.discussion import nodes
+
+        updated_summary = summary
+        if len(turns) > nodes.SUMMARY_THRESHOLD:
+            aged_out = turns[: -nodes.CONTEXT_TURN_LIMIT]
+            if aged_out:
+                summary_prompt = nodes.build_summary_prompt(summary, aged_out)
+                updated_summary = self._generator.generate(
+                    prompt=summary_prompt, max_words=200
+                ).strip()
+
+        title: str | None = None
+        if (
+            len(turns) <= nodes.TITLE_REFRESH_TURNS
+            or nodes.is_generic_title(current_title)
+        ):
+            title_prompt = nodes.build_title_prompt(turns, question)
+            title = nodes.clean_title(
+                self._generator.generate(prompt=title_prompt, max_words=8)
+            )
+        return updated_summary, title

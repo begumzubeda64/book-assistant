@@ -16,6 +16,15 @@ export function setTokenProvider(provider: TokenProvider): void {
   tokenProvider = provider;
 }
 
+/** The current bearer token (or null in local-dev bypass). For streaming
+ *  clients that bypass `apiFetch` but must use the same auth path. */
+export function getAuthToken(): Promise<string | null> {
+  return tokenProvider();
+}
+
+/** Base URL for API requests (empty string in local-dev via the Vite proxy). */
+export const apiBaseUrl = API_BASE_URL;
+
 // The auth layer registers a handler so a 401 (expired/invalid session) clears
 // the local user and routes back to the login screen, instead of leaving a
 // stale "logged in" nav bar with a dead session.

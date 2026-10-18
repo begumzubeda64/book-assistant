@@ -1,4 +1,4 @@
-import { apiFetch } from "@/services/api";
+import { apiBaseUrl, apiFetch, ApiRequestError, getAuthToken } from "@/services/api";
 import type {
   Conversation,
   ConversationCreated,
@@ -67,4 +67,78 @@ export function postMessage(
     `/api/v1/discussions/${encodeURIComponent(conversationId)}/messages`,
     { method: "POST", body: JSON.stringify(request) },
   );
+}
+
+export interface StreamDelta {
+  type: "delta";
+  text: string;
+}
+
+export interface StreamFinal {
+  type: "final";
+  message_id?: string;
+  title?: string | null;
+  citations?: unknown[];
+}
+
+export type StreamEvent = StreamDelta | StreamFinal | { type: "error" };
+
+/**
+ * Stream a grounded answer via Server-Sent Events. Calls `onEvent` for each
+ * parsed event (token deltas, then a final event). Uses fetch streaming (not
+ * EventSource) so we can POST a body and attach the bearer token. The returned
+ * promise resolves when the stream closes; pass an AbortSignal to stop reading
+ * (the backend still completes + persists the answer regardless).
+ */
+export async function streamMessage(
+  conversationId: string,
+  request: PostMessageRequest,
+  onEvent: (event: StreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(
+    `${apiBaseUrl}/api/v1/discussions/${encodeURIComponent(
+      conversationId,
+    )}/messages/stream`,
+    { method: "POST", headers, body: JSON.stringify(request), signal },
+  );
+  if (!res.ok || !res.body) {
+    throw new ApiRequestError(res.status, {
+      code: "STREAM_ERROR",
+      message: res.statusText,
+    });
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  // SSE frames are separated by a blank line; each frame has "data:" lines.
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      for (const line of frame.split("\n")) {
+        const trimmed = line.trimStart();
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (!data) continue;
+        try {
+          onEvent(JSON.parse(data) as StreamEvent);
+        } catch {
+          // Ignore malformed frames.
+        }
+      }
+    }
+  }
 }

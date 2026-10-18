@@ -18,6 +18,7 @@ Security:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import quote
 
@@ -121,6 +122,70 @@ class McpToolClient:
             )
             return _unwrap(result)
 
+    def call_stream(
+        self, name: str, arguments: dict[str, Any]
+    ) -> Iterator[str]:
+        """Call a streaming tool, yielding each progress ``message`` delta.
+
+        The tool reports token deltas via MCP progress notifications; we forward
+        them to a thread-safe queue and yield them as they arrive. The MCP call
+        runs on its own event loop in a worker thread so the (synchronous) agent
+        graph can iterate the deltas. A sentinel marks completion.
+        """
+        import queue
+        import threading
+
+        q: queue.Queue[tuple[str, Any]] = queue.Queue()
+
+        async def _run() -> None:
+
+            from mcp import ClientSession
+            from mcp.client.streamable_http import streamablehttp_client
+
+            async def _on_progress(
+                progress: float, total: float | None, message: str | None
+            ) -> None:
+                if message:
+                    q.put(("delta", message))
+
+            auth = _make_sigv4_auth(self._region)
+            try:
+                async with (
+                    streamablehttp_client(self._url, auth=auth) as (read, write, _),
+                    ClientSession(read, write) as session,
+                ):
+                    await session.initialize()
+                    await session.call_tool(
+                        name,
+                        arguments,
+                        meta={"scope_token": self._scope_token},
+                        progress_callback=_on_progress,
+                    )
+                q.put(("done", None))
+            except Exception as exc:  # surfaced to the consumer
+                q.put(("error", exc))
+            finally:
+                # anyio/asyncio cleanup is handled by asyncio.run below.
+                pass
+
+        def _thread() -> None:
+            import asyncio
+
+            asyncio.run(_run())
+
+        worker = threading.Thread(target=_thread, daemon=True)
+        worker.start()
+        while True:
+            kind, value = q.get()
+            if kind == "delta":
+                yield value
+            elif kind == "error":
+                worker.join(timeout=1)
+                raise value
+            else:  # done
+                worker.join(timeout=1)
+                return
+
 
 def _unwrap(result: Any) -> Any:
     """Return the tool's structured content, or the text payload parsed as JSON."""
@@ -202,6 +267,12 @@ class McpTextGeneration:
             self._client.call(
                 "generate_text", {"prompt": prompt, "max_words": max_words}
             )
+        )
+
+    def generate_stream(self, *, prompt: str, max_words: int) -> Iterator[str]:
+        """Stream generation deltas from the MCP ``generate_text_stream`` tool."""
+        yield from self._client.call_stream(
+            "generate_text_stream", {"prompt": prompt, "max_words": max_words}
         )
 
 

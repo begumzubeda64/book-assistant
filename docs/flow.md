@@ -187,9 +187,18 @@ GET /api/v1/discussions/{id}           → ConversationResponse (user-scoped)
   citations. `GET /api/v1/discussions/personas` lists the options; the persona is
   shown on the discussion list and chat header. Available: Podcast Host
   (default), Scholar, Coach, Skeptic, Storyteller, The Wit (playful/sarcastic).
-- **Streaming:** the answer is returned whole and revealed progressively in the
-  UI (typewriter), not streamed token-by-token end to end (see
-  `docs/decisions.md` for the tradeoff).
+- **Streaming (real, end-to-end SSE):** `POST /api/v1/discussions/{id}/messages/
+  stream` returns `text/event-stream`. Tokens flow Bedrock
+  (`invoke_model_with_response_stream`) → MCP `generate_text_stream` (deltas as
+  progress notifications) → discussion agent generator entrypoint (AgentCore
+  emits SSE) → `AgentCoreResponseInvoker.invoke_stream` → FastAPI
+  `StreamingResponse` → browser (`streamMessage` reads `response.body`, paced
+  reveal). CloudFront passes SSE through because the API distribution uses the
+  `CachingDisabled` policy (no domain needed). Generation + persistence run in a
+  detached, shielded task, so navigating away still completes and saves the
+  answer server-side; the completed answer shows from the DB on return. The
+  non-streaming `POST .../messages` and buffered `generate_text` remain as a
+  fallback and for the adaptive-reading agent. (See `docs/decisions.md`.)
 - Config: `CONVERSATIONS_TABLE_NAME`, `KNOWLEDGE_BASE_ID`, `GENERATION_MODEL_ID`.
 
 ## Ingestion pipeline (implemented — agent tier)
@@ -252,8 +261,9 @@ GET /api/v1/reading/{reading_id} → S3ReadingResultRepository (user-scoped) →
 - Package: `mcp_server/` (FastMCP server) + `mcp_server/tools/`.
 - `TOOL_ALLOWLIST` is the single source of truth for permitted tools.
 - Implemented: `get_authorized_content`, `ingest_to_knowledge_base`,
-  `get_book_content`, `generate_text`, `store_reading_result`,
-  `graphrag_retrieve`. Concept persistence is added with the recommendations group.
+  `get_book_content`, `generate_text`, `generate_text_stream`,
+  `store_reading_result`, `graphrag_retrieve`. Concept persistence is added with
+  the recommendations group.
 - `generate_text` is the single model-calling capability; agents never invoke
   Bedrock directly.
 - Re-checks authorization on every call; never exposes arbitrary AWS APIs.

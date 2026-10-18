@@ -8,6 +8,7 @@ implementations live behind the MCP boundary (decisions.md, security.md).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -56,6 +57,19 @@ class TextGenerationPort(Protocol):
 
     def generate(self, *, prompt: str, max_words: int) -> str:
         """Generate text for the prompt, targeting an approximate word budget."""
+        ...
+
+
+class StreamingTextGenerationPort(Protocol):
+    """Token-streaming foundation-model generation.
+
+    Implemented by generators that can emit partial text as the model produces
+    it (used by the discussion agent to stream an answer). Separate from
+    ``TextGenerationPort`` so non-streaming callers are unaffected.
+    """
+
+    def generate_stream(self, *, prompt: str, max_words: int) -> Iterator[str]:
+        """Yield text deltas as they are produced."""
         ...
 
 

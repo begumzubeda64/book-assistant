@@ -11,6 +11,7 @@ The boto3 client is injected for testability; the real data-plane call is
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any, Protocol
 
 from src.core.config import Settings
@@ -106,3 +107,40 @@ class AgentCoreResponseInvoker:
         if isinstance(body, bytes | bytearray):
             body = body.decode("utf-8")
         return json.loads(body) if body else {}
+
+    def invoke_stream(
+        self, runtime_arn: str, payload: dict[str, Any]
+    ) -> Iterator[dict[str, Any]]:
+        """Invoke the runtime for an SSE stream, yielding decoded event dicts.
+
+        Sets ``accept=text/event-stream`` so the runtime returns its generator
+        output as SSE, then parses each ``data:`` line back into a dict. The
+        runtime yields ``delta`` events then a ``final`` event (see the
+        discussion agent entrypoint).
+        """
+        response = self._client.invoke_agent_runtime(
+            agentRuntimeArn=runtime_arn,
+            runtimeSessionId=_session_id(payload),
+            payload=json.dumps(payload).encode("utf-8"),
+            accept="text/event-stream",
+        )
+        body = response.get("response")
+        if body is None:
+            return
+        # Iterate the streaming body line by line; SSE frames are "data: {...}".
+        iterator = body.iter_lines() if hasattr(body, "iter_lines") else body
+        for raw in iterator:
+            if not raw:
+                continue
+            line = raw.decode("utf-8") if isinstance(raw, bytes | bytearray) else raw
+            line = line.strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[len("data:") :].strip()
+            if not data:
+                continue
+            try:
+                yield json.loads(data)
+            except json.JSONDecodeError:
+                logger.warning("agentcore_stream_bad_frame")
+                continue

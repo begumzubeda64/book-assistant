@@ -415,8 +415,9 @@ reveal delivers the visible streaming effect with zero backend/infra risk and
 preserves the citation and title flow. Honest tradeoff: time-to-first-token is
 unchanged (the reveal starts only after the full answer arrives).
 
-**Status.** Accepted. True end-to-end streaming is a possible future change if
-time-to-first-token (not just the visual effect) becomes a requirement.
+**Status.** Superseded by "Real end-to-end discussion streaming over SSE"
+(2026-10-18). The CloudFront concern turned out not to block SSE when the
+`CachingDisabled` policy is used (see the superseding entry).
 
 ---
 
@@ -535,3 +536,51 @@ is a localized addition with no pipeline or frontend changes. The guardrails in
 the voice text keep the humor from undermining accuracy or turning rude.
 
 **Status.** Accepted. Extends the 2026-10-18 personas decision.
+
+---
+
+## 2026-10-18 — Real end-to-end discussion streaming over SSE
+
+**Decision.** The discussion answer now streams token-by-token end to end,
+replacing the frontend typewriter reveal. The path:
+
+- MCP tier: new `generate_text_stream` tool using Bedrock
+  `invoke_model_with_response_stream`, forwarding each delta as an MCP progress
+  notification (``message``). The agent's `McpToolClient.call_stream` consumes
+  the progress callback and yields deltas.
+- Agent runtime: the discussion `@app.entrypoint` returns a GENERATOR when
+  ``stream`` is set; `BedrockAgentCoreApp` then emits `text/event-stream`
+  automatically (SSE), yielding ``delta`` events then a ``final`` event with
+  answer/citations/title/summary.
+- Backend: `AgentCoreResponseInvoker.invoke_stream` sets
+  ``accept=text/event-stream`` and iterates the streaming body; a new endpoint
+  `POST /api/v1/discussions/{id}/messages/stream` returns a FastAPI
+  `StreamingResponse(text/event-stream)` with anti-buffering headers
+  (`Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`) and an
+  initial ``: open`` comment to flush immediately.
+- Frontend: `streamMessage` reads `response.body` via a reader (fetch streaming,
+  not EventSource, so it can POST a body + attach the bearer token), parses SSE
+  frames, and reveals tokens through a paced render queue (~steady, readable
+  rate — deliberately not instant bursts).
+
+**No domain / CloudFront.** Earlier analysis assumed CloudFront would buffer SSE
+and force a custom domain + ACM cert. That was wrong: CloudFront with the AWS
+managed `CachingDisabled` policy (which the API distribution already uses) does
+not buffer the response, so SSE passes through on the existing
+`*.cloudfront.net` API URL. No domain was added.
+
+**Navigate-away behavior.** Generation + persistence run in a DETACHED asyncio
+task that is shielded and NOT tied to the response connection. If the user
+navigates away mid-stream, the live view stops (the browser closes the SSE
+connection) but the agent keeps generating server-side and persists the full
+message to DynamoDB. On return, the chat loads the thread from the DB and shows
+the completed answer. No hidden background SSE connection is kept in the browser.
+
+**Why.** The user explicitly rejected the frontend reveal as a "cheap mockup"
+and asked for real backend streaming, accepting the multi-tier change. The
+detached-task design makes persistence robust to client disconnect (FastAPI may
+cancel a `StreamingResponse` generator on disconnect, which would otherwise lose
+the answer). The buffered `generate_text` tool and non-streaming `answer` path
+are retained for the adaptive-reading agent and as a fallback.
+
+**Status.** Accepted. Supersedes "Discussion streaming is a frontend reveal".
