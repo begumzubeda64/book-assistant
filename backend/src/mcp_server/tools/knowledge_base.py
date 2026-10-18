@@ -53,10 +53,21 @@ class KnowledgeBaseTool:
     ) -> str:
         prefix = chunk_prefix(user_id, book_id)
         for chunk in chunks:
+            # The document body is the chunk TEXT (what gets embedded + graphed),
+            # not a JSON wrapper. A companion ``<key>.metadata.json`` makes
+            # user_id/book_id/provenance FILTERABLE KB attributes so retrieval
+            # can be scoped to the owner (security.md) and cite sources.
+            key = f"{prefix}{chunk.chunk_id}.txt"
             self._s3.put_object(
                 Bucket=self._bucket,
-                Key=f"{prefix}{chunk.chunk_id}.json",
-                Body=self._serialize(chunk, user_id),
+                Key=key,
+                Body=chunk.text.encode("utf-8"),
+                ContentType="text/plain",
+            )
+            self._s3.put_object(
+                Bucket=self._bucket,
+                Key=f"{key}.metadata.json",
+                Body=self._metadata_sidecar(chunk, user_id),
                 ContentType="application/json",
             )
         response = self._bedrock.start_ingestion_job(
@@ -110,14 +121,33 @@ class KnowledgeBaseTool:
         return deleted
 
     @staticmethod
-    def _serialize(chunk: PreparedChunk, user_id: str) -> bytes:
-        # Preserve provenance and the ownership boundary alongside the text.
-        payload = {
-            "chunk_id": chunk.chunk_id,
-            "text": chunk.text,
-            "metadata": {
-                "user_id": user_id,
-                **chunk.source.model_dump(exclude_none=True),
-            },
+    def _metadata_sidecar(chunk: PreparedChunk, user_id: str) -> bytes:
+        """Bedrock KB metadata sidecar: makes these attributes FILTERABLE.
+
+        Format: {"metadataAttributes": {"<key>": {"value": {"type": ..,
+        "stringValue"/"numberValue": ..}, "includeForEmbedding": false}}}.
+        Ownership (user_id, book_id) and provenance (chunk_id, chapter, page)
+        are preserved so retrieval can be user/book-scoped and cite sources.
+        """
+        src = chunk.source
+
+        def attr(value: object) -> dict[str, Any]:
+            if isinstance(value, bool):
+                return {"value": {"type": "BOOLEAN", "booleanValue": value}}
+            if isinstance(value, int):
+                return {"value": {"type": "NUMBER", "numberValue": value}}
+            return {"value": {"type": "STRING", "stringValue": str(value)}}
+
+        attributes: dict[str, Any] = {
+            "user_id": attr(user_id),
+            "book_id": attr(src.book_id),
+            "chunk_id": attr(chunk.chunk_id),
         }
-        return json.dumps(payload).encode("utf-8")
+        if src.chapter_title:
+            attributes["chapter_title"] = attr(src.chapter_title)
+        if src.section:
+            attributes["section"] = attr(src.section)
+        if src.page is not None:
+            attributes["page"] = attr(src.page)
+
+        return json.dumps({"metadataAttributes": attributes}).encode("utf-8")

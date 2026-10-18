@@ -3,8 +3,10 @@ import { useParams } from "react-router-dom";
 
 import { Markdown } from "@/components/Markdown";
 import { ErrorState, Spinner } from "@/components/states";
+import { useAuth } from "@/features/auth/useAuth";
 import { friendlyError } from "@/services/errors";
 import { getConversation, postMessage } from "@/services/discussions";
+import { getUploadedBook } from "@/stores/uploadedBooks";
 import type { Citation, DiscussionMessage } from "@/types/discussions";
 
 type LoadState =
@@ -54,15 +56,23 @@ function MessageBubble({ message }: { message: DiscussionMessage }) {
   );
 }
 
+// How many most-recent messages to show before "load older".
+const RECENT_WINDOW = 10;
+
 export function DiscussionPage() {
   const { conversationId } = useParams();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [bookId, setBookId] = useState<string>("");
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const bookTitle =
+    (user && bookId && getUploadedBook(user.userId, bookId)?.title) || null;
 
   const fetchConversation = useCallback(async () => {
     if (!conversationId) return;
@@ -107,9 +117,15 @@ export function DiscussionPage() {
     setQuestion("");
 
     try {
-      const answer = await postMessage(conversationId, { question: text });
-      setMessages((prev) => [...prev, answer]);
+      await postMessage(conversationId, { question: text });
+      // Reconcile with the server so the thread reflects the persisted history
+      // (both the question and the grounded answer), not just local optimism.
+      const conv = await getConversation(conversationId);
+      setMessages(conv.messages);
     } catch (err) {
+      // Roll back the optimistic question on failure.
+      setMessages((prev) => prev.filter((m) => m.message_id !== optimistic.message_id));
+      setQuestion(text);
       setAskError(friendlyError(err, "We couldn't get an answer. Please try again."));
     } finally {
       setAsking(false);
@@ -123,7 +139,9 @@ export function DiscussionPage() {
   return (
     <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-2xl flex-col">
       <h1 className="text-lg font-semibold">Discussion</h1>
-      <p className="text-sm text-slate-400">Book: {bookId}</p>
+      <p className="truncate text-sm text-slate-400">
+        {bookTitle ?? "Your book"}
+      </p>
 
       <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
         {messages.length === 0 && (
@@ -132,7 +150,17 @@ export function DiscussionPage() {
             source references.
           </p>
         )}
-        {messages.map((m) => (
+        {!showAll && messages.length > RECENT_WINDOW && (
+          <div className="flex justify-center">
+            <button
+              onClick={() => setShowAll(true)}
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50"
+            >
+              Load earlier messages
+            </button>
+          </div>
+        )}
+        {(showAll ? messages : messages.slice(-RECENT_WINDOW)).map((m) => (
           <MessageBubble key={m.message_id} message={m} />
         ))}
         {asking && (

@@ -26,35 +26,53 @@ class BookContentTool:
     def get_chunks(
         self, *, user_id: str, book_id: str, chapter_id: str | None = None
     ) -> list[PreparedChunk]:
+        # Chunks are stored as `<chunk>.txt` (document text) with a companion
+        # `<chunk>.txt.metadata.json` (filterable KB metadata). Read the text
+        # objects and reconstruct provenance from their sidecars.
         prefix = chunk_prefix(user_id, book_id)
         chunks: list[PreparedChunk] = []
         paginator = self._s3.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
             for obj in page.get("Contents", []) or []:
-                body = self._s3.get_object(Bucket=self._bucket, Key=obj["Key"])
-                payload = json.loads(body["Body"].read())
-                chunk = self._to_chunk(payload)
-                if chapter_id and chunk.source.chapter_id != chapter_id:
+                key = obj["Key"]
+                if not key.endswith(".txt"):
+                    continue  # skip sidecars and anything else
+                text = (
+                    self._s3.get_object(Bucket=self._bucket, Key=key)["Body"]
+                    .read()
+                    .decode("utf-8")
+                )
+                source = self._read_source(f"{key}.metadata.json", book_id)
+                if chapter_id and source.chapter_id != chapter_id:
                     continue
-                chunks.append(chunk)
+                chunks.append(
+                    PreparedChunk(
+                        chunk_id=key.rsplit("/", 1)[-1].removesuffix(".txt"),
+                        text=text,
+                        word_count=len(text.split()),
+                        source=source,
+                    )
+                )
         chunks.sort(key=lambda c: (c.source.page or 0, c.chunk_id))
         return chunks
 
-    @staticmethod
-    def _to_chunk(payload: dict[str, Any]) -> PreparedChunk:
-        meta = payload.get("metadata", {})
-        text = payload.get("text", "")
-        return PreparedChunk(
-            chunk_id=payload["chunk_id"],
-            text=text,
-            word_count=len(text.split()),
-            source=SourceRef(
-                book_id=meta.get("book_id", ""),
-                chapter_id=meta.get("chapter_id"),
-                chapter_title=meta.get("chapter_title"),
-                section=meta.get("section"),
-                page=meta.get("page"),
-            ),
+    def _read_source(self, sidecar_key: str, book_id: str) -> SourceRef:
+        try:
+            raw = self._s3.get_object(Bucket=self._bucket, Key=sidecar_key)
+            attrs = json.loads(raw["Body"].read()).get("metadataAttributes", {})
+        except Exception:
+            return SourceRef(book_id=book_id)
+
+        def val(name: str) -> Any:
+            v = attrs.get(name, {}).get("value", {})
+            return v.get("stringValue") or v.get("numberValue")
+
+        page = val("page")
+        return SourceRef(
+            book_id=val("book_id") or book_id,
+            chapter_title=val("chapter_title"),
+            section=val("section"),
+            page=int(page) if page is not None else None,
         )
 
 

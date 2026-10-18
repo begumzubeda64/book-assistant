@@ -70,11 +70,18 @@ def test_kb_tool_writes_chunks_and_starts_ingestion() -> None:
 
     assert ref == "ij-123"
     assert bedrock.ingestion_calls == 1
-    assert len(s3.puts) == 1
-    put = s3.puts[0]
-    assert put["Key"].startswith(chunk_prefix("u1", "book1"))
-    # Ownership + provenance preserved in the stored chunk metadata.
-    payload = json.loads(put["Body"])
-    assert payload["metadata"]["user_id"] == "u1"
-    assert payload["metadata"]["book_id"] == "book1"
-    assert payload["metadata"]["page"] == 1
+    # Each chunk writes a text document + a filterable metadata sidecar.
+    assert len(s3.puts) == 2
+    by_key = {p["Key"]: p for p in s3.puts}
+    prefix = chunk_prefix("u1", "book1")
+    text_key = f"{prefix}book1:p1:s0.txt"
+    sidecar_key = f"{text_key}.metadata.json"
+    assert text_key in by_key
+    assert sidecar_key in by_key
+    # Document body is the chunk text (not a JSON wrapper).
+    assert by_key[text_key]["Body"] == b"hello"
+    # Sidecar makes user_id/book_id/page filterable KB attributes.
+    attrs = json.loads(by_key[sidecar_key]["Body"])["metadataAttributes"]
+    assert attrs["user_id"]["value"]["stringValue"] == "u1"
+    assert attrs["book_id"]["value"]["stringValue"] == "book1"
+    assert attrs["page"]["value"]["numberValue"] == 1

@@ -43,6 +43,13 @@ export function ReadingConfigPage() {
         mode,
         focus,
       });
+      // The backend dedupes on (book, mode, focus, minutes): an identical
+      // request returns the SAME job. If it's already done, go straight to the
+      // existing reading instead of regenerating/waiting. (reading_id == job_id)
+      if (job.status === "COMPLETED") {
+        navigate(`/reading/${encodeURIComponent(job.job_id)}`);
+        return;
+      }
       const final = await pollJob(job.job_id, {
         intervalMs: 3000,
         maxAttempts: 100, // ~5 min: generation + model latency
@@ -53,7 +60,6 @@ export function ReadingConfigPage() {
         setState({ kind: "error", message: friendlyJobFailure("reading") });
         return;
       }
-      // reading_id == job_id
       navigate(`/reading/${encodeURIComponent(job.job_id)}`);
     } catch (err) {
       setState({
