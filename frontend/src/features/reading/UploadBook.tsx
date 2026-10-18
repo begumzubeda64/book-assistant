@@ -121,8 +121,8 @@ export function UploadBook({ onUploaded }: { onUploaded: () => void }) {
           <span className="text-sm">{label}</span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          We&apos;re getting your book ready. This can take a little while — you
-          can keep browsing and come back.
+          Getting your book ready to read and discuss. This takes a moment —
+          feel free to grab a coffee while we set things up. ☕
         </p>
       </div>
     );

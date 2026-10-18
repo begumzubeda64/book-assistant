@@ -78,8 +78,8 @@ export function ReadingConfigPage() {
           <span className="text-sm">{state.label}</span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          We&apos;re condensing the book into coherent prose — this runs in the
-          background.
+          Shaping the book into a clear, readable piece just for you. This takes
+          a moment — a good time to grab a coffee. ☕
         </p>
       </div>
     );

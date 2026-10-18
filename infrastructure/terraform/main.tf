@@ -107,7 +107,9 @@ module "ecs" {
     # Discussion runs in the agent/MCP tier; the API invokes the discussion
     # runtime and mints the scope token. It holds NO Bedrock permissions.
     AGENT_RUNTIME_ARN_DISCUSSION = try(module.ai.discussion_runtime_arn, "")
-    SCOPE_SECRET_ARN             = try(module.ai.scope_secret_arn, "")
+    # Book deletion -> KB cleanup goes through the MCP runtime.
+    MCP_RUNTIME_ARN  = try(module.ai.mcp_runtime_arn, "")
+    SCOPE_SECRET_ARN = try(module.ai.scope_secret_arn, "")
   }
 
   # The API invokes the discussion runtime (chat) and the MCP runtime (book

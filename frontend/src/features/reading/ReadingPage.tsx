@@ -64,24 +64,46 @@ export function ReadingPage() {
         {reading.content}
       </div>
 
-      {reading.source_refs.length > 0 && (
-        <section className="mt-8 border-t border-slate-200 pt-4">
-          <h2 className="text-sm font-medium text-slate-500">Sources</h2>
-          <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {reading.source_refs.map((ref, i) => (
-              <li key={i}>
-                {[
-                  ref.chapter_title,
-                  ref.section,
-                  ref.page != null ? `p. ${ref.page}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "Source"}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {reading.source_refs.length > 0 &&
+        (() => {
+          // A labelled reference (chapter/section) reads as real provenance.
+          // When only page numbers exist, collapse them into one tidy line
+          // instead of a stacked list of bare "p. N" entries.
+          const labelled = reading.source_refs
+            .map((ref) =>
+              [ref.chapter_title, ref.section].filter(Boolean).join(" · "),
+            )
+            .filter(Boolean);
+          const pages = reading.source_refs
+            .map((ref) => ref.page)
+            .filter((p): p is number => p != null);
+          const uniquePages = [...new Set(pages)].sort((a, b) => a - b);
+
+          return (
+            <section className="mt-8 border-t border-slate-200 pt-4">
+              <h2 className="text-sm font-medium text-slate-500">
+                Drawn from your book
+              </h2>
+              {labelled.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                  {labelled.map((l, i) => (
+                    <li key={i}>{l}</li>
+                  ))}
+                </ul>
+              ) : uniquePages.length > 0 ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  {uniquePages.length === 1
+                    ? `Page ${uniquePages[0]}`
+                    : `Pages ${uniquePages.join(", ")}`}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  Condensed from across the book.
+                </p>
+              )}
+            </section>
+          );
+        })()}
 
       <div className="mt-8 flex gap-3">
         <Link
