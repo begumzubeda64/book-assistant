@@ -701,3 +701,23 @@ unreachable, unresolvable CVE (with documentation) keeps the gate meaningful.
 
 **Status.** Accepted. Requires rebuilding + redeploying the images (the live
 agents still run the old deps until the next manual deploy).
+
+---
+
+## 2026-10-18 — Replace trivy-action with a pinned Trivy container
+
+**Decision.** The `build.yml` image scan no longer uses the
+`aquasecurity/trivy-action` GitHub Action. It now runs Trivy directly via the
+pinned official container `aquasec/trivy:0.67.0` in a plain `run:` step
+(mounting `.trivyignore`).
+
+**Why.** The real cause of the CI failure was `Unable to resolve action
+aquasecurity/trivy-action@0.28.0` — the tag no longer exists. That action
+suffered a 2026-03 supply-chain compromise (GHSA-69fq-xp46-6x23) in which most
+version tags were force-pushed to credential-stealing malware and later removed,
+which is why the old pin stopped resolving. Rather than chase a new action tag,
+invoking a pinned, pre-incident Trivy image removes the action's tag surface
+entirely, is immune to tag tampering, and matches exactly how the scan is run and
+validated locally. `0.67.0` predates the compromised `0.69.4–0.69.6` images.
+
+**Status.** Accepted. Supersedes the `trivy-action@0.28.0` usage.
