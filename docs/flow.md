@@ -202,7 +202,10 @@ GET /api/v1/discussions/{id}           → ConversationResponse (user-scoped)
   currently does not deliver the tool's progress notifications (the live
   deltas), so `call_stream` falls back to the tool's full RETURN VALUE and the
   UI paces that reveal — real server-side generation, but not token-granular on
-  the wire until AgentCore delivers MCP progress. (See `docs/decisions.md`.)
+  the wire until AgentCore delivers MCP progress. Progress reporting in the
+  `generate_text_stream` tool is strictly best-effort (failures are swallowed),
+  so a transport that rejects progress notifications never breaks the answer.
+  (See `docs/decisions.md`.)
 - Config: `CONVERSATIONS_TABLE_NAME`, `KNOWLEDGE_BASE_ID`, `GENERATION_MODEL_ID`.
 
 ## Ingestion pipeline (implemented — agent tier)
@@ -253,6 +256,11 @@ POST /api/v1/reading/generate (auth; duration 3/5/10, mode, focus)
 
 GET /api/v1/reading/{reading_id} → S3ReadingResultRepository (user-scoped) → ReadingResult
 ```
+
+The reading list only returns COMPLETED readings (an in-progress one has no
+result to open). The config page shows a local "preparing…" pending row the
+instant generation starts (disabled View), and the Library flips to "Continue
+reading" immediately via a local flag; both reconcile with the backend on focus.
 
 - reading_id == job_id. Ranking never just takes the first N words.
 - Output is coherent prose within a generous word-budget tolerance (req 4.5);

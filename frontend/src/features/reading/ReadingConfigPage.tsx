@@ -43,7 +43,7 @@ function formatWhen(iso: string): string {
 // takeover, and surface a "ready" nudge (with a reading id to open) when done.
 type GenState =
   | { kind: "idle" }
-  | { kind: "generating" }
+  | { kind: "generating"; mode: ReadingMode; focus: ReadingFocus; minutes: number }
   | { kind: "ready"; readingId: string }
   | { kind: "error"; message: string };
 
@@ -87,7 +87,12 @@ export function ReadingConfigPage() {
 
   async function handleGenerate() {
     if (!bookId || gen.kind === "generating") return;
-    setGen({ kind: "generating" });
+    setGen({
+      kind: "generating",
+      mode,
+      focus,
+      minutes: selectedMode.minutes,
+    });
     // Record locally that a reading was started for this book, so the Library
     // shows "Continue reading" immediately — without waiting for generation to
     // finish or for the user to open the result.
@@ -231,12 +236,36 @@ export function ReadingConfigPage() {
           : `Generate ${selectedMode.minutes}-minute reading`}
       </button>
 
-      {existing.length > 0 && (
+      {(existing.length > 0 || gen.kind === "generating") && (
         <section className="mt-10 border-t border-slate-200 pt-6">
           <h2 className="text-sm font-medium text-slate-500">
             Your readings for this book
           </h2>
           <ul className="mt-2 space-y-2">
+            {/* Pending reading: shown the instant generation starts, with a
+                disabled View and a friendly "ready soon" note. */}
+            {gen.kind === "generating" && (
+              <li className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-700">
+                    <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                    {modeLabel(gen.mode)} · {focusLabel(gen.focus)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {gen.minutes}-minute read · preparing your reading — you can
+                    open it here as soon as it&apos;s ready.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  title="Available once your reading is ready"
+                  className="shrink-0 cursor-not-allowed rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-400"
+                >
+                  Preparing…
+                </button>
+              </li>
+            )}
             {existing.map((r) => (
               <li
                 key={r.reading_id}

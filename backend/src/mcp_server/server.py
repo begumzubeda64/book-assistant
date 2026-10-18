@@ -36,12 +36,15 @@ from src.agents.shared.ports import (
 )
 from src.agents.shared.types import PreparedChunk
 from src.core.config import Settings
+from src.core.logging import get_logger
 from src.mcp_server.scope import JobScope, verify_scope_token
 from src.mcp_server.tools.book_content import BookContentTool, ReadingStoreTool
 from src.mcp_server.tools.content import ContentTool
 from src.mcp_server.tools.generation import TextGenerationTool
 from src.mcp_server.tools.graphrag import GraphRAGRetrievalTool
 from src.mcp_server.tools.knowledge_base import KnowledgeBaseTool
+
+logger = get_logger(__name__)
 
 # The single source of truth for what the agents are permitted to invoke.
 TOOL_ALLOWLIST = frozenset(
@@ -192,39 +195,45 @@ def create_mcp_server(tools: ToolBundle, *, scope_secret: str) -> Any:
         value. Streaming support is detected at call time — if the injected
         generator can't stream, this falls back to a single buffered delta.
         """
+        import anyio
+
         _scope_from_context(ctx, scope_secret)
         gen = tools.generation
         stream = getattr(gen, "generate_stream", None)
+
+        async def _try_progress(index: float, message: str) -> None:
+            # Progress notifications are best-effort: AgentCore's MCP transport
+            # may not deliver them (the server->client channel can 405). Never
+            # let a failed notification break generation — the full text is
+            # always returned as the tool's value, which the caller uses.
+            try:
+                await ctx.report_progress(progress=index, message=message)
+            except Exception:
+                logger.debug("progress_notification_failed", exc_info=True)
+
         if not callable(stream):
             # No streaming support: one buffered result (still correct).
             text = gen.generate(prompt=prompt, max_words=max_words)
-            await ctx.report_progress(progress=1.0, message=text)
+            await _try_progress(1.0, text)
             return text
 
-        # Bridge the blocking Bedrock stream (run in a worker thread) back to
-        # the event loop, forwarding each delta as a progress notification so a
-        # progress-callback client receives tokens live.
-        import anyio
-        from anyio.from_thread import BlockingPortal
-
+        # Collect the whole answer in a worker thread (blocking Bedrock stream),
+        # attempting a best-effort progress notification per delta. Collecting
+        # the full text is the contract; live deltas are a bonus when the
+        # transport delivers them.
         pieces: list[str] = []
+        deltas: list[str] = []
 
-        async with BlockingPortal() as portal:
+        def _collect() -> None:
+            for piece in stream(prompt=prompt, max_words=max_words):
+                pieces.append(piece)
+                deltas.append(piece)
 
-            def _collect() -> None:
-                for index, piece in enumerate(
-                    stream(prompt=prompt, max_words=max_words), start=1
-                ):
-                    pieces.append(piece)
-                    portal.call(
-                        ctx.report_progress,
-                        float(index),
-                        None,
-                        piece,
-                    )
-
-            await anyio.to_thread.run_sync(_collect)
-
+        await anyio.to_thread.run_sync(_collect)
+        # Flush any collected deltas as progress (best-effort, post-hoc). If the
+        # transport rejects them it's silently ignored; the return value stands.
+        for index, piece in enumerate(deltas, start=1):
+            await _try_progress(float(index), piece)
         return "".join(pieces)
 
     @server.tool(name="store_reading_result")
