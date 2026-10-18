@@ -47,9 +47,20 @@ class AgentCoreInvoker:
     @classmethod
     def from_settings(cls, settings: Settings) -> AgentCoreInvoker:
         import boto3
+        from botocore.config import Config
 
+        # Bound the blocking invoke so a cold/slow/hung agent run can't pin the
+        # dispatcher for the full SQS visibility window. On timeout the invoke
+        # raises, the message is left for redelivery, and the agent (which marks
+        # the job PROCESSING/COMPLETED in DynamoDB and is idempotent) reconciles.
         client = boto3.client(
-            "bedrock-agentcore", region_name=settings.aws_region
+            "bedrock-agentcore",
+            region_name=settings.aws_region,
+            config=Config(
+                read_timeout=120,
+                connect_timeout=10,
+                retries={"max_attempts": 0},
+            ),
         )
         return cls(client)
 

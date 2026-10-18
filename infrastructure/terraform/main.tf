@@ -159,6 +159,12 @@ module "database" {
 module "messaging" {
   source      = "./modules/messaging"
   name_prefix = local.name_prefix
+
+  # Agents mark the job PROCESSING/COMPLETED in DynamoDB and are idempotent, so
+  # the trigger message only needs to cover one dispatcher->agent invoke (which
+  # is itself bounded to ~120s). A shorter visibility window means a slow/hung
+  # invoke is retried in minutes, not 15, instead of appearing stuck.
+  visibility_timeout_seconds = 180
 }
 #
 module "ai" {
