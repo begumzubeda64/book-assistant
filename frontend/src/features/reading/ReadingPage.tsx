@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { Markdown } from "@/components/Markdown";
 import { ErrorState, Spinner } from "@/components/states";
 import { friendlyError } from "@/services/errors";
 import { getReading } from "@/services/reading";
@@ -60,9 +61,10 @@ export function ReadingPage() {
         <span className="text-slate-400">~{reading.actual_words} words</span>
       </div>
 
-      <div className="mt-6 whitespace-pre-line text-[17px] leading-relaxed text-slate-800">
-        {reading.content}
-      </div>
+      <Markdown
+        content={reading.content}
+        className="mt-6 space-y-4 text-[17px] leading-relaxed text-slate-800 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mt-4 [&_h3]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:mt-1 [&_strong]:font-semibold [&_em]:italic [&_a]:text-slate-900 [&_a]:underline"
+      />
 
       {reading.source_refs.length > 0 &&
         (() => {

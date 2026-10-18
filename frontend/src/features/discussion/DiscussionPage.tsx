@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
+import { Markdown } from "@/components/Markdown";
 import { ErrorState, Spinner } from "@/components/states";
 import { friendlyError } from "@/services/errors";
 import { getConversation, postMessage } from "@/services/discussions";
@@ -39,7 +40,14 @@ function MessageBubble({ message }: { message: DiscussionMessage }) {
             : "border border-slate-200 bg-white text-slate-800"
         }`}
       >
-        <p className="whitespace-pre-line">{message.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-line">{message.content}</p>
+        ) : (
+          <Markdown
+            content={message.content}
+            className="space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-0.5 [&_strong]:font-semibold [&_em]:italic [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-semibold [&_a]:underline"
+          />
+        )}
         {!isUser && <CitationList citations={message.citations} />}
       </div>
     </div>

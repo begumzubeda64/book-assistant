@@ -95,10 +95,30 @@ export function LibraryBookRow({
           <button
             onClick={() => void handleRemove()}
             disabled={removing}
-            aria-label={`Remove ${book.title}`}
-            className="rounded border border-slate-200 px-3 py-1.5 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Remove"
+            title="Remove"
+            className="group relative flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {removing ? "Removing…" : "Remove"}
+            {removing ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
+            ) : (
+              <>
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                >
+                  <path d="M5 5l10 10M15 5L5 15" />
+                </svg>
+                <span className="pointer-events-none absolute -top-7 right-0 whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  Remove
+                </span>
+              </>
+            )}
           </button>
         </div>
       </div>

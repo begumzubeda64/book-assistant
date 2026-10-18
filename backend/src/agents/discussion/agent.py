@@ -11,9 +11,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.agents.discussion.graph import build_discussion_graph
-from src.agents.discussion.state import DiscussionState
 from src.agents.shared.ports import GraphRAGRetrievalPort, TextGenerationPort
+
+# NOTE: the LangGraph graph is imported lazily inside DiscussionAgent.__init__.
+# The API image does NOT install the `agents` extra (langgraph/mcp/pypdf), and
+# it only ever uses RemoteDiscussionAgent / the protocol from this module — so
+# importing this module must not require langgraph.
 
 
 @dataclass
@@ -92,6 +95,8 @@ class DiscussionAgent:
         retriever: GraphRAGRetrievalPort,
         generator: TextGenerationPort,
     ) -> None:
+        from src.agents.discussion.graph import build_discussion_graph
+
         self._graph = build_discussion_graph(retriever, generator)
 
     def answer(
@@ -102,7 +107,7 @@ class DiscussionAgent:
         question: str,
         history: list[tuple[str, str]] | None = None,
     ) -> DiscussionAnswer:
-        state: DiscussionState = {
+        state: dict[str, object] = {
             "user_id": user_id,
             "book_id": book_id,
             "question": question,
