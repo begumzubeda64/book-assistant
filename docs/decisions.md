@@ -666,3 +666,38 @@ what the user said, and the pending answer is shown as a generating state rather
 than a blank screen.
 
 **Status.** Accepted.
+
+---
+
+## 2026-10-18 — Fix the Build & Push CI: image CVEs, dependency bumps, and a scoped ignore
+
+**Context.** After merging to `main`, the `build.yml` workflow (Trivy scan with
+`exit-code: 1` on HIGH/CRITICAL) started failing on all five images. Root cause
+was real vulnerabilities, not a workflow bug.
+
+**Decisions.**
+1. **Strip base-image build tooling from runtime images.** Every runtime stage
+   now removes `pip`/`setuptools`/`wheel`/`pkg_resources` from the base image's
+   system site-packages (they shipped HIGH CVEs — wheel, setuptools' vendored
+   jaraco.context — and are not needed at runtime; the app runs from the uv venv).
+2. **Bump vulnerable app dependencies** (widening constraints that previously
+   capped below the fixes): `pypdf` `>=4.2,<6.0` → `>=6.14.2,<8.0` (now 6.21.1;
+   CVE-2026-59935/59936), `bedrock-agentcore` `>=0.1,<1.0` → `>=1.18.1,<2.0`
+   (now 1.24.1; CVE-2026-16796), and `langgraph` floor raised to `>=0.6.6`
+   (now 0.6.11). Verified the `BedrockAgentCoreApp` entrypoint + streaming
+   generator→SSE contract still hold on 1.24.x, and all 185 backend tests pass.
+3. **Scoped Trivy ignore for langgraph-sdk CVE-2026-104873.** The fix needs
+   langgraph-sdk `>=0.4.4`, but every cleanly-importing langgraph (0.6.x) pins it
+   `<0.4.4`, and the only langgraph allowing the fix (0.5.0) has an import-time
+   MRO bug — an unresolvable conflict today. langgraph-sdk is the LangGraph
+   Platform/Cloud CLIENT; our agents run local `StateGraph` graphs and never use
+   it, so the authorization-bypass path is unreachable in our runtime. Added a
+   justified entry in `.trivyignore` (wired into the workflow) to revisit when a
+   clean langgraph release compatible with sdk `>=0.4.4` ships.
+
+**Why.** The CI build/scan is a real quality gate; silencing it wholesale would
+hide genuine CVEs. Fixing the fixable ones properly and ignoring only the one
+unreachable, unresolvable CVE (with documentation) keeps the gate meaningful.
+
+**Status.** Accepted. Requires rebuilding + redeploying the images (the live
+agents still run the old deps until the next manual deploy).

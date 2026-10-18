@@ -63,6 +63,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
 
       - name: Configure AWS credentials (OIDC)
         if: ${{ vars.AWS_ROLE_ARN != '' }}

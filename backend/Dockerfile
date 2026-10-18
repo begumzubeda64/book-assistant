@@ -33,6 +33,15 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
+# The runtime uses the self-contained uv venv (/app/.venv); the base image's
+# system build tooling (pip/setuptools/wheel) is not needed at runtime and ships
+# packages with HIGH CVEs the image scan flags (e.g. wheel, setuptools' vendored
+# jaraco.context). Remove it so the runtime image stays clean.
+RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true; \
+    find /usr/local/lib/python3.11/site-packages \
+      \( -name 'setuptools*' -o -name 'wheel*' -o -name 'pip*' -o -name 'pkg_resources*' \) \
+      -exec rm -rf {} + 2>/dev/null || true
+
 # Create a non-root user to run the application.
 RUN groupadd --system app && useradd --system --gid app --home /app app
 
