@@ -42,12 +42,17 @@ resource "aws_s3_bucket_versioning" "uploads" {
   }
 }
 
-# CORS so the browser can PUT directly via the presigned URL from the frontend.
+# CORS so the browser can PUT directly via the presigned URL. Allows the
+# configured origins (localhost for dev) plus this deployment's own frontend
+# CloudFront origin, so the deployed SPA's direct-to-S3 upload is not blocked.
 resource "aws_s3_bucket_cors_configuration" "uploads" {
   bucket = aws_s3_bucket.uploads.id
   cors_rule {
     allowed_methods = ["PUT"]
-    allowed_origins = var.allowed_upload_origins
+    allowed_origins = distinct(concat(
+      var.allowed_upload_origins,
+      ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
+    ))
     allowed_headers = ["*"]
     max_age_seconds = 3000
   }
