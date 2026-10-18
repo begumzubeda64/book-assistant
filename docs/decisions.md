@@ -453,3 +453,26 @@ they start it, independent of backend job propagation. A small client-side flag
 "list my jobs by book" backend endpoint.
 
 **Status.** Accepted.
+
+---
+
+## 2026-10-18 — Keeping `flow.md` and `decisions.md` current is an enforced rule
+
+**Decision.** `development.md` now explicitly requires updating `docs/flow.md`
+whenever a boundary, tier, endpoint, service, integration, agent behavior,
+frontend flow, or runtime/deploy behavior changes, and appending a **dated**
+`docs/decisions.md` entry (supersede, never rewrite) for any meaningful or
+non-obvious decision — including live-deploy, bug-fix, and UX work, not just new
+features. "Definition of done" names both files. A `Stop` hook
+(`.kiro/hooks/docs-currency-check.json`) reminds the agent to check doc currency
+at the end of each turn.
+
+**Why.** Across a long live-deploy/bug-fix session both docs drifted because the
+prior steering only said "update documentation" in the abstract and referenced
+these files as *pointers*, not as a maintenance obligation. Naming the files and
+the triggering conditions — plus a hook backstop — makes the existing "living
+record" intent explicit so it no longer depends on memory. Tradeoff accepted: a
+small per-change overhead to keep the docs honest; the hook can't force judgment,
+only prompt the check.
+
+**Status.** Accepted.
