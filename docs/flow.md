@@ -119,6 +119,13 @@ the model is called only where generation is actually required.
 Idempotency: job creation uses an idempotency key / deterministic identity so
 retries do not produce duplicate expensive results.
 
+Cold-start/reliability: agents are warmed on login (`POST /api/v1/warmup` → the
+API background-pings each agent runtime, which returns `{"status":"warm"}`
+immediately). The dispatcher's AgentCore invoke is bounded (`read_timeout=120`)
+and the SQS visibility timeout is 180s (not 900s), so a cold/slow run can't pin a
+message for a long lock; on timeout the message redelivers and the idempotent
+agent reconciles (see `docs/decisions.md`).
+
 ## Reading progress flow (implemented)
 
 ```
@@ -155,7 +162,8 @@ POST /api/v1/discussions/{id}/messages { question } (auth)
           → citations (derived from retrieved passages — never fabricated)
       → persist user question + assistant answer (+citations) to DynamoDB
   → grounded MessageResponse with source references
-GET /api/v1/discussions/{id} → ConversationResponse (user-scoped)
+GET /api/v1/discussions               → list a book's conversations (summaries)
+GET /api/v1/discussions/{id}           → ConversationResponse (user-scoped)
 ```
 
 - Retrieval is scoped to `user_id` + `book_id`, so a user never sees another
@@ -163,6 +171,18 @@ GET /api/v1/discussions/{id} → ConversationResponse (user-scoped)
   because GraphRAG connects concepts across the book.
 - Citations come only from retrieved passages; if no sources are found the
   answer says so rather than inventing facts.
+- **Memory management:** older turns beyond a verbatim window are folded into a
+  running `summary` (stored on the conversation) so long threads stay within the
+  context window; the summary + recent turns + sources form the grounded prompt.
+- **Titling:** the agent returns a short intent-based `title` alongside the
+  answer. It is (re)generated during the opening turns and for as long as the
+  stored title is still a placeholder ("General chat"/none), so a later topic
+  replaces it; then it stabilizes. The frontend shows an instant question-derived
+  title on send, replaced by the agent's title on the response (see
+  `docs/decisions.md`).
+- **Streaming:** the answer is returned whole and revealed progressively in the
+  UI (typewriter), not streamed token-by-token end to end (see
+  `docs/decisions.md` for the tradeoff).
 - Config: `CONVERSATIONS_TABLE_NAME`, `KNOWLEDGE_BASE_ID`, `GENERATION_MODEL_ID`.
 
 ## Ingestion pipeline (implemented — agent tier)
@@ -283,6 +303,22 @@ reading (job polling) → read result with source refs → discuss (GraphRAG cha
 progress saved → continue reading. Async work uses `pollJob`; the PDF uploads
 directly to S3, never through the API. All screens use shared loading/empty/
 error/retry states.
+
+Live-deploy UX/reliability behaviors layered on top:
+- **Auth expiry:** an absent/expired token or any 401 clears the local session
+  and routes to `/login` (the deliberate "Sign out" still uses the Hosted UI
+  logout). Token validity is re-checked on mount and tab focus. The nav shows
+  "Sign in" when logged out.
+- **On-login warm-up:** `AuthCallbackPage` calls `POST /api/v1/warmup` to hide
+  agent cold starts behind the first navigation.
+- **Library freshness:** rows re-fetch progress/discussions/readings on tab
+  focus/visibility; a local "reading started" flag makes "Continue reading"
+  appear the instant generation is kicked off (see `docs/decisions.md`).
+- **Reading generation** runs in the background with a non-blocking status; the
+  user is never force-navigated and can open the result when it's ready.
+- **Markdown** model output is rendered sanitized (`marked` + `DOMPurify`); all
+  errors are mapped to friendly messages (`services/errors.ts`).
+- **Remove book:** `DELETE /api/v1/books/{id}` with a client store cleanup.
 
 Note: real end-to-end runtime needs the backend running with configured AWS
 (uploads/jobs/KB/etc.); the UI builds, boots, and is contract-correct now.

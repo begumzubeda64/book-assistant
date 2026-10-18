@@ -46,8 +46,20 @@ function CitationList({ citations }: { citations: Citation[] }) {
   );
 }
 
-function MessageBubble({ message }: { message: DiscussionMessage }) {
+function MessageBubble({
+  message,
+  // When set, the assistant message is mid-stream: render only this many
+  // characters and a caret, and hold citations until the reveal completes.
+  revealChars,
+}: {
+  message: DiscussionMessage;
+  revealChars?: number;
+}) {
   const isUser = message.role === "user";
+  const streaming = revealChars != null && revealChars < message.content.length;
+  const shown = streaming
+    ? message.content.slice(0, revealChars)
+    : message.content;
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -61,11 +73,11 @@ function MessageBubble({ message }: { message: DiscussionMessage }) {
           <p className="whitespace-pre-line">{message.content}</p>
         ) : (
           <Markdown
-            content={message.content}
+            content={shown + (streaming ? " ▍" : "")}
             className="space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-0.5 [&_strong]:font-semibold [&_em]:italic [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-semibold [&_a]:underline"
           />
         )}
-        {!isUser && <CitationList citations={message.citations} />}
+        {!isUser && !streaming && <CitationList citations={message.citations} />}
       </div>
     </div>
   );
@@ -115,6 +127,10 @@ export function DiscussionPage() {
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Streaming reveal: the assistant answer arrives whole from the backend, then
+  // we reveal it progressively (typewriter) so it reads like it's streaming.
+  const [streamId, setStreamId] = useState<string | null>(null);
+  const [streamChars, setStreamChars] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const bookTitle =
@@ -143,7 +159,30 @@ export function DiscussionPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, asking]);
+  }, [messages, asking, streamChars]);
+
+  // Typewriter reveal of the streaming assistant message: advance the visible
+  // character count on an interval until the whole answer is shown, then stop.
+  useEffect(() => {
+    if (!streamId) return;
+    const target = messages.find((m) => m.message_id === streamId);
+    if (!target) {
+      setStreamId(null);
+      return;
+    }
+    const total = target.content.length;
+    if (streamChars >= total) {
+      setStreamId(null); // fully revealed
+      return;
+    }
+    // Reveal a few characters per tick; scale step to length so long answers
+    // don't take too long, short ones still feel typed.
+    const step = Math.max(2, Math.ceil(total / 180));
+    const timer = window.setTimeout(() => {
+      setStreamChars((n) => Math.min(total, n + step));
+    }, 16);
+    return () => window.clearTimeout(timer);
+  }, [streamId, streamChars, messages]);
 
   async function ask(event: FormEvent) {
     event.preventDefault();
@@ -181,6 +220,14 @@ export function DiscussionPage() {
       const conv = await getConversation(conversationId);
       setMessages(conv.messages);
       if (conv.title) setTitle(conv.title);
+      // Begin streaming the just-arrived assistant answer (last assistant msg).
+      const lastAssistant = [...conv.messages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      if (lastAssistant) {
+        setStreamId(lastAssistant.message_id);
+        setStreamChars(0);
+      }
     } catch (err) {
       // Roll back the optimistic question and the instant title on failure.
       setMessages((prev) => prev.filter((m) => m.message_id !== optimistic.message_id));
@@ -227,9 +274,13 @@ export function DiscussionPage() {
           </div>
         )}
         {(showAll ? messages : messages.slice(-RECENT_WINDOW)).map((m) => (
-          <MessageBubble key={m.message_id} message={m} />
+          <MessageBubble
+            key={m.message_id}
+            message={m}
+            revealChars={m.message_id === streamId ? streamChars : undefined}
+          />
         ))}
-        {asking && (
+        {asking && !streamId && (
           <div className="flex justify-start">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2">
               <Spinner label="Thinking…" />
