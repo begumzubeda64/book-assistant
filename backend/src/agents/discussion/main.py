@@ -58,11 +58,16 @@ def handler(payload: dict[str, Any]) -> dict[str, Any]:
             book_id=payload["book_id"],
             question=payload["question"],
             history=history,  # type: ignore[arg-type]
+            summary=payload.get("summary"),
         )
     except Exception:
         logger.exception("discussion_entrypoint_error")
         raise
-    return {"answer": answer.answer, "citations": answer.citations}
+    return {
+        "answer": answer.answer,
+        "citations": answer.citations,
+        "updated_summary": answer.updated_summary,
+    }
 
 
 if __name__ == "__main__":  # pragma: no cover

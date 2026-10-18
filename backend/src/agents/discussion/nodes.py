@@ -10,29 +10,55 @@ from __future__ import annotations
 
 from src.agents.shared.ports import RetrievedPassage
 
-# How many prior turns of context to include in the prompt.
+# How many of the most recent turns to include verbatim in the prompt. Older
+# turns are folded into a running summary (see summarize_history) to keep long
+# conversations within the model context window.
 CONTEXT_TURN_LIMIT = 6
+
+# Summarize once the thread grows beyond this many turns.
+SUMMARY_THRESHOLD = CONTEXT_TURN_LIMIT
 
 
 def build_grounded_prompt(
     question: str,
     passages: list[RetrievedPassage],
     history: list[tuple[str, str]],
+    summary: str | None = None,
 ) -> str:
-    """Build a grounded answer prompt from context + retrieved sources."""
+    """Build a grounded answer prompt from summary + recent turns + sources."""
     recent = history[-CONTEXT_TURN_LIMIT:]
     history_block = "\n".join(f"{role}: {content}" for role, content in recent)
     source_block = "\n\n".join(
         f"[{p.chunk_id or i}] {p.text}" for i, p in enumerate(passages)
     )
+    summary_block = (
+        f"EARLIER CONVERSATION SUMMARY:\n{summary}\n\n" if summary else ""
+    )
     return (
-        "You are a book companion answering questions about a book.\n"
-        "Answer ONLY using the source material below. If the sources do not "
-        "contain the answer, say you cannot find it in the book. Do not invent "
-        "facts or citations.\n\n"
-        f"CONVERSATION SO FAR:\n{history_block or '(none)'}\n\n"
+        "You are a book companion answering questions about a book. Use the "
+        "earlier conversation summary and recent turns for context, but ground "
+        "every factual claim in the SOURCE MATERIAL below. If the sources do "
+        "not contain the answer, say you cannot find it in the book. Do not "
+        "invent facts or citations.\n\n"
+        f"{summary_block}"
+        f"RECENT CONVERSATION:\n{history_block or '(none)'}\n\n"
         f"SOURCE MATERIAL:\n{source_block or '(no relevant sources found)'}\n\n"
         f"QUESTION: {question}"
+    )
+
+
+def build_summary_prompt(
+    prior_summary: str | None, aged_out: list[tuple[str, str]]
+) -> str:
+    """Prompt to roll older turns into a concise running summary."""
+    turns = "\n".join(f"{role}: {content}" for role, content in aged_out)
+    prior = f"PREVIOUS SUMMARY:\n{prior_summary}\n\n" if prior_summary else ""
+    return (
+        "Summarize the following book discussion so a later turn has the "
+        "important context. Keep it concise (a few sentences), factual, and "
+        "focused on what was asked and concluded. Merge with the previous "
+        "summary if present.\n\n"
+        f"{prior}NEW TURNS TO FOLD IN:\n{turns}\n\nUPDATED SUMMARY:"
     )
 
 

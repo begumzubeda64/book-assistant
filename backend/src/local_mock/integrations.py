@@ -153,6 +153,17 @@ class LocalReadingStore:
     async def get(self, user_id: str, reading_id: str) -> dict[str, Any] | None:
         return self.results.get(f"{user_id}/{reading_id}")
 
+    async def list_for_book(
+        self, user_id: str, book_id: str
+    ) -> list[dict[str, Any]]:
+        out = [
+            v
+            for k, v in self.results.items()
+            if k.startswith(f"{user_id}/") and v.get("book_id") == book_id
+        ]
+        out.sort(key=lambda p: str(p.get("created_at", "")), reverse=True)
+        return out
+
 
 def _text_as_pdf(text: str) -> bytes:
     """Carry plain text behind the ingestion node's local-mock sentinel.

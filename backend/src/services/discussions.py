@@ -53,17 +53,26 @@ class DiscussionService:
             )
         return conversation
 
+    async def list_for_book(
+        self, user: AuthenticatedUser, book_id: str
+    ) -> list[Conversation]:
+        """List the user's conversations for a book (newest first)."""
+        return await self._repo.list_for_book(user.user_id, book_id)
+
     async def post_message(
         self, user: AuthenticatedUser, conversation_id: str, question: str
     ) -> Message:
         conversation = await self.get_conversation(user, conversation_id)
 
         history = [(m.role.value, m.content) for m in conversation.messages]
+        # Pass both the running summary of older turns and the recent turns, so
+        # the model has the full conversation context (memory management).
         result = self._agent.answer(
             user_id=user.user_id,
             book_id=conversation.book_id,
             question=question,
             history=history,
+            summary=conversation.summary,
         )
 
         user_msg = Message(
@@ -80,6 +89,9 @@ class DiscussionService:
             ],
         )
         await self._repo.append_messages(
-            user.user_id, conversation_id, [user_msg, assistant_msg]
+            user.user_id,
+            conversation_id,
+            [user_msg, assistant_msg],
+            summary=result.updated_summary,
         )
         return assistant_msg

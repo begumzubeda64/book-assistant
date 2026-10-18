@@ -44,6 +44,21 @@ class ReadingSourceRef(APIModel):
     page: int | None = None
 
 
+class ReadingSummary(APIModel):
+    """A lightweight entry for listing a book's generated readings."""
+
+    reading_id: str
+    book_id: str
+    mode: ReadingMode
+    focus: ReadingFocus
+    target_minutes: int
+    created_at: datetime
+
+
+class ReadingList(APIModel):
+    items: list[ReadingSummary] = Field(default_factory=list)
+
+
 class ReadingResult(APIModel):
     """A generated adaptive reading."""
 

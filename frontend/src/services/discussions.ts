@@ -24,6 +24,24 @@ export function getConversation(
   );
 }
 
+export interface ConversationSummary {
+  conversation_id: string;
+  book_id: string;
+  title: string | null;
+  message_count: number;
+  updated_at: string;
+}
+
+export async function listConversations(
+  bookId: string,
+): Promise<ConversationSummary[]> {
+  const params = new URLSearchParams({ book_id: bookId });
+  const res = await apiFetch<{ items: ConversationSummary[] }>(
+    `/api/v1/discussions?${params}`,
+  );
+  return res.items;
+}
+
 export function postMessage(
   conversationId: string,
   request: PostMessageRequest,

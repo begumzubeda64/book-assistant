@@ -16,17 +16,31 @@ type LoadState =
 
 function CitationList({ citations }: { citations: Citation[] }) {
   if (citations.length === 0) return null;
+  // Prefer labelled references (chapter/section). When only page numbers exist,
+  // show them as one tidy "Pages 1, 2, 3" line instead of bare "p. 1 | p. 2".
+  const labelled = citations
+    .map((c) => [c.chapter_title, c.section].filter(Boolean).join(" · "))
+    .filter(Boolean);
+  const pages = citations
+    .map((c) => c.page)
+    .filter((p): p is number => p != null);
+  const uniquePages = [...new Set(pages)].sort((a, b) => a - b);
+
+  let label: string;
+  if (labelled.length > 0) {
+    label = [...new Set(labelled)].join("  ·  ");
+  } else if (uniquePages.length === 1) {
+    label = `Page ${uniquePages[0]}`;
+  } else if (uniquePages.length > 1) {
+    label = `Pages ${uniquePages.join(", ")}`;
+  } else {
+    label = "Drawn from the book";
+  }
+
   return (
     <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-500">
       <span className="font-medium">Sources: </span>
-      {citations
-        .map((c) =>
-          [c.chapter_title, c.section, c.page != null ? `p. ${c.page}` : null]
-            .filter(Boolean)
-            .join(" · "),
-        )
-        .filter(Boolean)
-        .join("  |  ") || "referenced from the book"}
+      {label}
     </div>
   );
 }

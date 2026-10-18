@@ -11,6 +11,25 @@ export function generateReading(
   });
 }
 
+export interface ReadingSummary {
+  reading_id: string;
+  book_id: string;
+  mode: string;
+  focus: string;
+  target_minutes: number;
+  created_at: string;
+}
+
+export async function listReadings(
+  bookId: string,
+): Promise<ReadingSummary[]> {
+  const params = new URLSearchParams({ book_id: bookId });
+  const res = await apiFetch<{ items: ReadingSummary[] }>(
+    `/api/v1/reading?${params}`,
+  );
+  return res.items;
+}
+
 // A reading is immutable once generated, so cache fetched results for the
 // session to avoid re-fetching the same object on every view/navigation.
 const readingCache = new Map<string, ReadingResult>();

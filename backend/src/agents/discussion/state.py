@@ -15,6 +15,7 @@ class DiscussionState(TypedDict, total=False):
     book_id: str
     question: str
     history: list[tuple[str, str]]  # (role, content) prior turns
+    summary: str | None  # running summary of older turns (memory management)
 
     # Populated by nodes
     passages: list[RetrievedPassage]

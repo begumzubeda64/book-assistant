@@ -84,10 +84,28 @@ class InMemoryConversationRepository:
     ) -> Conversation | None:
         return self._items.get((user_id, conversation_id))
 
+    async def list_for_book(
+        self, user_id: str, book_id: str
+    ) -> list[Conversation]:
+        convos = [
+            c
+            for (uid, _cid), c in self._items.items()
+            if uid == user_id and c.book_id == book_id
+        ]
+        convos.sort(key=lambda c: c.updated_at, reverse=True)
+        return convos
+
     async def append_messages(
-        self, user_id: str, conversation_id: str, messages: list[Message]
+        self,
+        user_id: str,
+        conversation_id: str,
+        messages: list[Message],
+        *,
+        summary: str | None = None,
     ) -> Conversation:
         conversation = self._items[(user_id, conversation_id)]
         conversation.messages.extend(messages)
+        if summary is not None:
+            conversation.summary = summary
         conversation.updated_at = datetime.now(UTC)
         return conversation

@@ -23,6 +23,9 @@ from src.agents.shared.ports import GraphRAGRetrievalPort, TextGenerationPort
 class DiscussionAnswer:
     answer: str
     citations: list[dict[str, object]]
+    # Updated running summary of older turns (memory management); None when the
+    # thread is short enough that no summary is needed yet.
+    updated_summary: str | None = None
 
 
 class DiscussionAgentProtocol(Protocol):
@@ -39,6 +42,7 @@ class DiscussionAgentProtocol(Protocol):
         book_id: str,
         question: str,
         history: list[tuple[str, str]] | None = None,
+        summary: str | None = None,
     ) -> DiscussionAnswer: ...
 
 
@@ -66,6 +70,7 @@ class RemoteDiscussionAgent:
         book_id: str,
         question: str,
         history: list[tuple[str, str]] | None = None,
+        summary: str | None = None,
     ) -> DiscussionAnswer:
         from src.mcp_server.scope import mint_scope_token
 
@@ -79,12 +84,14 @@ class RemoteDiscussionAgent:
                 "book_id": book_id,
                 "question": question,
                 "history": [list(h) for h in (history or [])],
+                "summary": summary,
                 "scope_token": token,
             },
         )
         return DiscussionAnswer(
             answer=result.get("answer", ""),
             citations=result.get("citations", []),
+            updated_summary=result.get("updated_summary"),
         )
 
 
@@ -98,6 +105,7 @@ class DiscussionAgent:
         from src.agents.discussion.graph import build_discussion_graph
 
         self._graph = build_discussion_graph(retriever, generator)
+        self._generator = generator
 
     def answer(
         self,
@@ -106,15 +114,34 @@ class DiscussionAgent:
         book_id: str,
         question: str,
         history: list[tuple[str, str]] | None = None,
+        summary: str | None = None,
     ) -> DiscussionAnswer:
+        from src.agents.discussion import nodes
+
+        turns = history or []
         state: dict[str, object] = {
             "user_id": user_id,
             "book_id": book_id,
             "question": question,
-            "history": history or [],
+            "history": turns,
+            "summary": summary,
         }
         result = self._graph.invoke(state)
+
+        # Memory management: once the thread exceeds the verbatim window, fold
+        # the aged-out turns into a concise running summary so future turns stay
+        # within the context window without losing earlier context.
+        updated_summary = summary
+        if len(turns) > nodes.SUMMARY_THRESHOLD:
+            aged_out = turns[: -nodes.CONTEXT_TURN_LIMIT]
+            if aged_out:
+                summary_prompt = nodes.build_summary_prompt(summary, aged_out)
+                updated_summary = self._generator.generate(
+                    prompt=summary_prompt, max_words=200
+                ).strip()
+
         return DiscussionAnswer(
             answer=result.get("answer", ""),
             citations=result.get("citations", []),
+            updated_summary=updated_summary,
         )

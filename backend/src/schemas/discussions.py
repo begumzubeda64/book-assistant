@@ -50,3 +50,17 @@ class ConversationResponse(APIModel):
 class ConversationCreatedResponse(APIModel):
     conversation_id: str
     book_id: str
+
+
+class ConversationSummary(APIModel):
+    """Lightweight entry for listing a book's conversations."""
+
+    conversation_id: str
+    book_id: str
+    title: str | None = None
+    message_count: int = 0
+    updated_at: datetime
+
+
+class ConversationList(APIModel):
+    items: list[ConversationSummary] = Field(default_factory=list)

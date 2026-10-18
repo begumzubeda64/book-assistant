@@ -9,7 +9,9 @@ job_id immediately (requirement 4.7). The reading_id equals the job_id.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, status
 
 from src.api.dependencies import (
     CurrentUser,
@@ -20,7 +22,12 @@ from src.api.dependencies import (
 from src.core.errors import NotFoundError, ValidationAppError
 from src.models.job import JobType
 from src.schemas.jobs import JobCreatedResponse
-from src.schemas.reading import ReadingGenerateRequest, ReadingResult
+from src.schemas.reading import (
+    ReadingGenerateRequest,
+    ReadingList,
+    ReadingResult,
+    ReadingSummary,
+)
 
 router = APIRouter(prefix="/reading", tags=["reading"])
 
@@ -56,6 +63,28 @@ async def generate_reading(
         focus=request.focus.value,
     )
     return JobCreatedResponse(job_id=job.job_id, status=job.status)
+
+
+@router.get("", response_model=ReadingList)
+async def list_readings(
+    user: CurrentUser,
+    results: ReadingResultRepoDep,
+    book_id: Annotated[str, Query(min_length=1)],
+) -> ReadingList:
+    """List the user's already-generated readings for a book (newest first)."""
+    payloads = await results.list_for_book(user.user_id, book_id)
+    items = [
+        ReadingSummary(
+            reading_id=p["reading_id"],
+            book_id=p["book_id"],
+            mode=p["mode"],
+            focus=p["focus"],
+            target_minutes=p["target_minutes"],
+            created_at=p["created_at"],
+        )
+        for p in payloads
+    ]
+    return ReadingList(items=items)
 
 
 @router.get("/{reading_id}", response_model=ReadingResult)

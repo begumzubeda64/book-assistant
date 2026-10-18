@@ -1,9 +1,13 @@
-import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
-import { generateReading } from "@/services/reading";
+import {
+  generateReading,
+  listReadings,
+  type ReadingSummary,
+} from "@/services/reading";
 import { pollJob } from "@/services/jobs";
 import { friendlyError, friendlyJobFailure } from "@/services/errors";
 import { getUploadedBook } from "@/stores/uploadedBooks";
@@ -13,6 +17,24 @@ import {
   type ReadingFocus,
   type ReadingMode,
 } from "@/types/reading";
+
+function modeLabel(value: string): string {
+  return READING_MODES.find((m) => m.value === value)?.label ?? value;
+}
+
+function focusLabel(value: string): string {
+  return READING_FOCUSES.find((f) => f.value === value)?.label ?? value;
+}
+
+function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 type State =
   | { kind: "form" }
@@ -30,8 +52,20 @@ export function ReadingConfigPage() {
   const [mode, setMode] = useState<ReadingMode>("balanced_read");
   const [focus, setFocus] = useState<ReadingFocus>("key_ideas");
   const [state, setState] = useState<State>({ kind: "form" });
+  const [existing, setExisting] = useState<ReadingSummary[]>([]);
 
   const selectedMode = READING_MODES.find((m) => m.value === mode)!;
+
+  const refreshExisting = useCallback(() => {
+    if (!bookId) return;
+    listReadings(bookId)
+      .then(setExisting)
+      .catch(() => setExisting([]));
+  }, [bookId]);
+
+  useEffect(() => {
+    refreshExisting();
+  }, [refreshExisting]);
 
   async function handleGenerate() {
     if (!bookId) return;
@@ -105,6 +139,41 @@ export function ReadingConfigPage() {
             onRetry={() => setState({ kind: "form" })}
           />
         </div>
+      )}
+
+      {existing.length > 0 && (
+        <section className="mt-6">
+          <h2 className="text-sm font-medium text-slate-500">
+            Your readings for this book
+          </h2>
+          <ul className="mt-2 space-y-2">
+            {existing.map((r) => (
+              <li
+                key={r.reading_id}
+                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-700">
+                    {modeLabel(r.mode)} · {focusLabel(r.focus)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {r.target_minutes}-minute read · generated{" "}
+                    {formatWhen(r.created_at)}
+                  </p>
+                </div>
+                <Link
+                  to={`/reading/${encodeURIComponent(r.reading_id)}`}
+                  className="shrink-0 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  View
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-slate-500">
+            Or create a new reading below.
+          </p>
+        </section>
       )}
 
       <section className="mt-6">

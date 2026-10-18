@@ -49,5 +49,9 @@ class Conversation(BaseModel):
     book_id: str
     title: str | None = None
     messages: list[Message] = Field(default_factory=list)
+    # Running summary of older turns, maintained once the thread grows past the
+    # verbatim window, so long conversations stay within the model context
+    # without losing earlier context (memory management).
+    summary: str | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

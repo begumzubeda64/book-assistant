@@ -10,7 +10,9 @@ references. Conversations are scoped to the authenticated user (requirement 1.3)
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, status
 
 from src.api.dependencies import (
     CurrentUser,
@@ -19,13 +21,37 @@ from src.api.dependencies import (
 )
 from src.schemas.discussions import (
     ConversationCreatedResponse,
+    ConversationList,
     ConversationResponse,
+    ConversationSummary,
     CreateConversationRequest,
     MessageResponse,
     PostMessageRequest,
 )
 
 router = APIRouter(prefix="/discussions", tags=["discussions"])
+
+
+@router.get("", response_model=ConversationList)
+async def list_discussions(
+    user: CurrentUser,
+    service: DiscussionServiceDep,
+    book_id: Annotated[str, Query(min_length=1)],
+) -> ConversationList:
+    """List the user's conversations for a book (newest first)."""
+    convos = await service.list_for_book(user, book_id)
+    return ConversationList(
+        items=[
+            ConversationSummary(
+                conversation_id=c.conversation_id,
+                book_id=c.book_id,
+                title=c.title,
+                message_count=len(c.messages),
+                updated_at=c.updated_at,
+            )
+            for c in convos
+        ]
+    )
 
 
 @router.post(
