@@ -105,8 +105,11 @@ class JobDispatcher:
             self._invoker.invoke(runtime_arn, body)
         except Exception as exc:
             # Leave the message on the queue for redelivery (-> DLQ after N).
-            logger.info(
-                "dispatcher_invoke_failed",
+            # Log the concrete error so failures are diagnosable, not opaque.
+            logger.warning(
+                "dispatcher_invoke_failed: %s: %s",
+                type(exc).__name__,
+                exc,
                 extra={"job_type": job_type, "error_type": type(exc).__name__},
             )
             return False

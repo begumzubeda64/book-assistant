@@ -19,6 +19,19 @@ from src.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _session_id(payload: dict[str, Any]) -> str:
+    """AgentCore requires a runtimeSessionId of at least 33 characters.
+
+    Derive a stable id from the job (so retries reuse the same session) and pad
+    to the minimum length. Falls back to a random id when there is no job_id.
+    """
+    import uuid
+
+    base = str(payload.get("job_id") or uuid.uuid4())
+    # Pad deterministically to satisfy the >=33 char constraint.
+    return (base + "-" + "0" * 33)[:48]
+
+
 class AgentInvokerPort(Protocol):
     def invoke(self, runtime_arn: str, payload: dict[str, Any]) -> None:
         """Invoke an agent runtime with a JSON payload (fire-and-forget)."""
@@ -43,6 +56,7 @@ class AgentCoreInvoker:
     def invoke(self, runtime_arn: str, payload: dict[str, Any]) -> None:
         self._client.invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
+            runtimeSessionId=_session_id(payload),
             payload=json.dumps(payload).encode("utf-8"),
         )
         logger.info(
@@ -71,6 +85,7 @@ class AgentCoreResponseInvoker:
     def invoke(self, runtime_arn: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
+            runtimeSessionId=_session_id(payload),
             payload=json.dumps(payload).encode("utf-8"),
         )
         body = response.get("response")
