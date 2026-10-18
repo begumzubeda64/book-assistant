@@ -454,10 +454,15 @@ resource "aws_iam_role_policy" "agent_exec" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "InvokeMcpToolServer"
-        Effect   = "Allow"
-        Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
-        Resource = ["${awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn}*"]
+        # Grant the runtime ARN and its endpoint sub-resource
+        # (.../runtime-endpoint/DEFAULT), which is the actual invoke target.
+        Sid    = "InvokeMcpToolServer"
+        Effect = "Allow"
+        Action = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource = [
+          awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn,
+          "${awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn}/*",
+        ]
       },
       {
         Sid      = "JobStatusBookkeeping"

@@ -105,7 +105,7 @@ resource "aws_iam_role_policy" "api_invoke_runtimes" {
       Sid      = "InvokeDiscussionRuntime"
       Effect   = "Allow"
       Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
-      Resource = [for a in var.api_invoke_runtime_arns : "${a}*"]
+      Resource = flatten([for a in var.api_invoke_runtime_arns : [a, "${a}/*"]])
     }]
   })
 }
@@ -234,10 +234,13 @@ resource "aws_iam_role_policy" "dispatcher_task" {
         Resource = var.jobs_queue_arn == "" ? ["*"] : [var.jobs_queue_arn]
       },
       {
+        # Invoke targets the runtime AND its endpoint sub-resource
+        # (.../runtime/<name>/runtime-endpoint/DEFAULT), so grant both the ARN
+        # and its children.
         Sid      = "InvokeAgents"
         Effect   = "Allow"
         Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
-        Resource = var.agent_runtime_arns
+        Resource = flatten([for a in var.agent_runtime_arns : [a, "${a}/*"]])
       }
     ]
   })
