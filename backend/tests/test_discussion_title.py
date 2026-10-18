@@ -50,10 +50,44 @@ def test_agent_stops_titling_after_opening_turns() -> None:
         ("user" if i % 2 == 0 else "assistant", f"turn {i}")
         for i in range(nodes.TITLE_REFRESH_TURNS + 2)
     ]
+    # A real (non-generic) title already exists, so past the opening window it
+    # should stabilize and not be regenerated.
     result = agent.answer(
-        user_id="u1", book_id="b1", question="q", history=long_history
+        user_id="u1",
+        book_id="b1",
+        question="q",
+        history=long_history,
+        current_title="Established Topic",
     )
     assert result.title is None  # title has stabilized
+
+
+def test_generic_title_keeps_refreshing_past_the_window() -> None:
+    # Past the opening window, a stabilized real title would not refresh — but a
+    # still-generic title ("General chat") must keep refreshing so a later topic
+    # replaces it.
+    agent = DiscussionAgent(
+        retriever=_FakeRetriever(), generator=_TitleGenerator("Real Topic Now")
+    )
+    long_history = [
+        ("user" if i % 2 == 0 else "assistant", f"turn {i}")
+        for i in range(nodes.TITLE_REFRESH_TURNS + 2)
+    ]
+    result = agent.answer(
+        user_id="u1",
+        book_id="b1",
+        question="a real topic?",
+        history=long_history,
+        current_title="General chat",
+    )
+    assert result.title == "Real Topic Now"
+
+
+def test_is_generic_title() -> None:
+    assert nodes.is_generic_title("General chat") is True
+    assert nodes.is_generic_title("  discussion ") is True
+    assert nodes.is_generic_title(None) is True
+    assert nodes.is_generic_title("Marriage And Society") is False
 
 
 class _FakeRepo:

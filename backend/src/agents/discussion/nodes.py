@@ -74,6 +74,18 @@ def clean_title(raw: str) -> str:
     return text[:60] or "Discussion"
 
 
+# Placeholder titles that carry no real topic yet. While the current title is
+# one of these, we keep (re)generating on each turn so the first real topic
+# replaces it, even past the normal opening-turns window ("replace the title if
+# context was not enough").
+_GENERIC_TITLES = {"general chat", "discussion", "new discussion", ""}
+
+
+def is_generic_title(title: str | None) -> bool:
+    """True when the title is still a placeholder (no real topic captured)."""
+    return (title or "").strip().lower() in _GENERIC_TITLES
+
+
 def build_summary_prompt(
     prior_summary: str | None, aged_out: list[tuple[str, str]]
 ) -> str:

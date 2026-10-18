@@ -46,6 +46,7 @@ class DiscussionAgentProtocol(Protocol):
         question: str,
         history: list[tuple[str, str]] | None = None,
         summary: str | None = None,
+        current_title: str | None = None,
     ) -> DiscussionAnswer: ...
 
 
@@ -74,6 +75,7 @@ class RemoteDiscussionAgent:
         question: str,
         history: list[tuple[str, str]] | None = None,
         summary: str | None = None,
+        current_title: str | None = None,
     ) -> DiscussionAnswer:
         from src.mcp_server.scope import mint_scope_token
 
@@ -88,6 +90,7 @@ class RemoteDiscussionAgent:
                 "question": question,
                 "history": [list(h) for h in (history or [])],
                 "summary": summary,
+                "current_title": current_title,
                 "scope_token": token,
             },
         )
@@ -119,6 +122,7 @@ class DiscussionAgent:
         question: str,
         history: list[tuple[str, str]] | None = None,
         summary: str | None = None,
+        current_title: str | None = None,
     ) -> DiscussionAnswer:
         from src.agents.discussion import nodes
 
@@ -144,10 +148,16 @@ class DiscussionAgent:
                     prompt=summary_prompt, max_words=200
                 ).strip()
 
-        # Intent-based title: (re)generate during the opening turns so a casual
-        # opener gets replaced once a real topic emerges, then it stabilizes.
+        # Intent-based title. (Re)generate during the opening turns so a casual
+        # opener gets replaced once a real topic emerges. Also keep regenerating
+        # for as long as the current title is still a placeholder ("General
+        # chat"/none), so a topic that appears later still replaces it — i.e.
+        # "replace the title if context was not enough" earlier.
         title: str | None = None
-        if len(turns) <= nodes.TITLE_REFRESH_TURNS:
+        if (
+            len(turns) <= nodes.TITLE_REFRESH_TURNS
+            or nodes.is_generic_title(current_title)
+        ):
             title_prompt = nodes.build_title_prompt(turns, question)
             title = nodes.clean_title(
                 self._generator.generate(prompt=title_prompt, max_words=8)

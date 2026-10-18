@@ -73,6 +73,9 @@ class DiscussionService:
             question=question,
             history=history,
             summary=conversation.summary,
+            # Pass the current title so the agent can keep refreshing it while
+            # it's still a placeholder (replace it once a real topic appears).
+            current_title=conversation.title,
         )
 
         user_msg = Message(

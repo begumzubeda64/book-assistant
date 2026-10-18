@@ -11,6 +11,7 @@ import {
 } from "@/services/reading";
 import { pollJob } from "@/services/jobs";
 import { friendlyError, friendlyJobFailure } from "@/services/errors";
+import { markReadingStarted } from "@/stores/readingActivity";
 import { getUploadedBook } from "@/stores/uploadedBooks";
 import {
   READING_FOCUSES,
@@ -74,6 +75,10 @@ export function ReadingConfigPage() {
   async function handleGenerate() {
     if (!bookId || gen.kind === "generating") return;
     setGen({ kind: "generating" });
+    // Record locally that a reading was started for this book, so the Library
+    // shows "Continue reading" immediately — without waiting for generation to
+    // finish or for the user to open the result.
+    if (user) markReadingStarted(user.userId, bookId);
     try {
       const job = await generateReading({
         book_id: bookId,

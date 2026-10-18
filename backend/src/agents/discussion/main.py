@@ -61,6 +61,7 @@ def handler(payload: dict[str, Any]) -> dict[str, Any]:
             question=payload["question"],
             history=history,  # type: ignore[arg-type]
             summary=payload.get("summary"),
+            current_title=payload.get("current_title"),
         )
     except Exception:
         logger.exception("discussion_entrypoint_error")

@@ -7,6 +7,11 @@ import { listConversations } from "@/services/discussions";
 import { friendlyError } from "@/services/errors";
 import { getProgress } from "@/services/progress";
 import { listReadings } from "@/services/reading";
+import {
+  clearReadingStarted,
+  hasStartedReading,
+  markReadingStarted,
+} from "@/stores/readingActivity";
 import { removeUploadedBook, type UploadedBook } from "@/stores/uploadedBooks";
 import { READING_MODES } from "@/types/reading";
 import type { ProgressResponse } from "@/types/progress";
@@ -27,6 +32,7 @@ export function LibraryBookRow({
   const [progress, setProgress] = useState<ProgressResponse | null>(null);
   const [hasDiscussions, setHasDiscussions] = useState(false);
   const [readingCount, setReadingCount] = useState(0);
+  const [started, setStarted] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
@@ -41,6 +47,7 @@ export function LibraryBookRow({
     try {
       await deleteBook(book.bookId);
       removeUploadedBook(user.userId, book.bookId);
+      clearReadingStarted(user.userId, book.bookId);
       onRemoved?.();
     } catch (err) {
       setRemoving(false);
@@ -51,6 +58,8 @@ export function LibraryBookRow({
   }
 
   const refresh = useCallback(() => {
+    // Local, instant signal: did the user kick off a reading for this book?
+    if (user) setStarted(hasStartedReading(user.userId, book.bookId));
     getProgress(book.bookId)
       .then(setProgress)
       .catch(() => {});
@@ -62,9 +71,17 @@ export function LibraryBookRow({
     // Count generated readings so the row reflects work the user just kicked
     // off, even before they open it.
     listReadings(book.bookId)
-      .then((readings) => setReadingCount(readings.length))
+      .then((readings) => {
+        setReadingCount(readings.length);
+        // A completed reading implies one was started; keep the local flag in
+        // sync (covers readings started on another device/session).
+        if (readings.length > 0 && user) {
+          markReadingStarted(user.userId, book.bookId);
+          setStarted(true);
+        }
+      })
       .catch(() => {});
-  }, [book.bookId]);
+  }, [book.bookId, user]);
 
   // Fetch on mount, and re-fetch whenever the user returns to this tab/window.
   // Starting a discussion or generating a reading happens on another route;
@@ -86,6 +103,11 @@ export function LibraryBookRow({
 
   const resumeLabel = modeLabel(progress?.selected_mode);
   const hasReadings = readingCount > 0;
+  // Show "Continue reading" once a reading has been started for this book
+  // (locally recorded the moment generation kicks off) or the user has
+  // in-progress reading progress — unless they've marked it completed.
+  const canContinue = (started || (!!progress && !progress.completed)) &&
+    !(progress?.completed ?? false);
 
   return (
     <li className="rounded-lg border border-slate-200 bg-white p-3">
@@ -94,16 +116,13 @@ export function LibraryBookRow({
           <p className="truncate font-medium">{book.title}</p>
           <p className="text-xs text-slate-400">
             Uploaded {new Date(book.uploadedAt).toLocaleDateString()}
-            {progress && (
-              <>
-                {" · "}
-                {progress.completed
-                  ? "Completed"
-                  : resumeLabel
-                    ? `Last read: ${resumeLabel}`
-                    : "In progress"}
-              </>
-            )}
+            {progress?.completed ? (
+              <> · Completed</>
+            ) : resumeLabel ? (
+              <> · Last read: {resumeLabel}</>
+            ) : started ? (
+              <> · Reading in progress</>
+            ) : null}
             {hasReadings && (
               <>
                 {" · "}
@@ -117,7 +136,7 @@ export function LibraryBookRow({
             to={`/reading/new?book=${encodeURIComponent(book.bookId)}`}
             className="rounded bg-slate-900 px-3 py-1.5 font-medium text-white hover:bg-slate-800"
           >
-            {progress && !progress.completed ? "Continue reading" : "Read"}
+            {canContinue ? "Continue reading" : "Read"}
           </Link>
           <Link
             to={`/discussions/new?book=${encodeURIComponent(book.bookId)}`}
