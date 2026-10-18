@@ -363,7 +363,7 @@ export function DiscussionPage() {
           awaitingAnswer) && (
           <div className="flex justify-start">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2">
-              <Spinner label="Generating the answer…" />
+              <Spinner label="Thinking…" />
             </div>
           </div>
         )}
