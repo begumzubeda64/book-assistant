@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { BackLink } from "@/components/BackLink";
 import { ErrorState } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
 import {
@@ -124,7 +125,8 @@ export function ReadingConfigPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold">Adaptive Reading</h1>
+      <BackLink to="/library" label="Back to library" />
+      <h1 className="mt-2 text-xl font-semibold">Adaptive Reading</h1>
       <p className="mt-1 text-slate-500">
         {book ? book.title : "Selected book"} — choose how you want to read.
       </p>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+import { BackLink } from "@/components/BackLink";
 import { ErrorState, Spinner } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
 import { friendlyError } from "@/services/errors";
@@ -79,7 +80,8 @@ export function DiscussionStartPage() {
   // Existing conversations: let the user continue one or start fresh.
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-xl font-semibold">Discuss {bookTitle}</h1>
+      <BackLink to="/library" label="Back to library" />
+      <h1 className="mt-2 text-xl font-semibold">Discuss {bookTitle}</h1>
       <p className="mt-1 text-slate-500">
         Continue a previous discussion or start a new one.
       </p>

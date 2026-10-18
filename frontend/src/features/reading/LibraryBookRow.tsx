@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/useAuth";
@@ -6,6 +6,7 @@ import { deleteBook } from "@/services/books";
 import { listConversations } from "@/services/discussions";
 import { friendlyError } from "@/services/errors";
 import { getProgress } from "@/services/progress";
+import { listReadings } from "@/services/reading";
 import { removeUploadedBook, type UploadedBook } from "@/stores/uploadedBooks";
 import { READING_MODES } from "@/types/reading";
 import type { ProgressResponse } from "@/types/progress";
@@ -25,6 +26,7 @@ export function LibraryBookRow({
   const { user } = useAuth();
   const [progress, setProgress] = useState<ProgressResponse | null>(null);
   const [hasDiscussions, setHasDiscussions] = useState(false);
+  const [readingCount, setReadingCount] = useState(0);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
@@ -48,26 +50,42 @@ export function LibraryBookRow({
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
+  const refresh = useCallback(() => {
     getProgress(book.bookId)
-      .then((p) => {
-        if (!cancelled) setProgress(p);
-      })
+      .then(setProgress)
       .catch(() => {});
     // Does this book already have discussions? If so, offer a "Discussions"
     // shortcut to the thread list.
     listConversations(book.bookId)
-      .then((convos) => {
-        if (!cancelled) setHasDiscussions(convos.length > 0);
-      })
+      .then((convos) => setHasDiscussions(convos.length > 0))
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    // Count generated readings so the row reflects work the user just kicked
+    // off, even before they open it.
+    listReadings(book.bookId)
+      .then((readings) => setReadingCount(readings.length))
+      .catch(() => {});
   }, [book.bookId]);
 
+  // Fetch on mount, and re-fetch whenever the user returns to this tab/window.
+  // Starting a discussion or generating a reading happens on another route;
+  // refreshing on focus/visibility keeps the labels current on return without
+  // a manual reload.
+  useEffect(() => {
+    refresh();
+    const onFocus = () => refresh();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refresh]);
+
   const resumeLabel = modeLabel(progress?.selected_mode);
+  const hasReadings = readingCount > 0;
 
   return (
     <li className="rounded-lg border border-slate-200 bg-white p-3">
@@ -84,6 +102,12 @@ export function LibraryBookRow({
                   : resumeLabel
                     ? `Last read: ${resumeLabel}`
                     : "In progress"}
+              </>
+            )}
+            {hasReadings && (
+              <>
+                {" · "}
+                {readingCount} reading{readingCount === 1 ? "" : "s"}
               </>
             )}
           </p>

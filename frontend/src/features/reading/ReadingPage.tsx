@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { BackLink } from "@/components/BackLink";
 import { Markdown } from "@/components/Markdown";
 import { ErrorState, Spinner } from "@/components/states";
 import { friendlyError } from "@/services/errors";
@@ -48,6 +49,12 @@ export function ReadingPage() {
 
   return (
     <article className="mx-auto max-w-2xl">
+      <div className="mb-3">
+        <BackLink
+          to={`/reading/new?book=${encodeURIComponent(reading.book_id)}`}
+          label="Back to readings"
+        />
+      </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="rounded-full bg-slate-900 px-3 py-1 font-medium text-white">
           {reading.target_minutes}-minute adaptive reading

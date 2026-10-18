@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
+import { BackLink } from "@/components/BackLink";
 import { Markdown } from "@/components/Markdown";
 import { ErrorState, Spinner } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
@@ -78,6 +79,7 @@ export function DiscussionPage() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [bookId, setBookId] = useState<string>("");
+  const [title, setTitle] = useState<string | null>(null);
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
@@ -95,6 +97,7 @@ export function DiscussionPage() {
       const conv = await getConversation(conversationId);
       setMessages(conv.messages);
       setBookId(conv.book_id);
+      setTitle(conv.title ?? null);
       setLoad({ kind: "loaded" });
     } catch (err) {
       setLoad({
@@ -134,8 +137,10 @@ export function DiscussionPage() {
       await postMessage(conversationId, { question: text });
       // Reconcile with the server so the thread reflects the persisted history
       // (both the question and the grounded answer), not just local optimism.
+      // The title is (re)generated over the opening turns, so refresh it too.
       const conv = await getConversation(conversationId);
       setMessages(conv.messages);
+      setTitle(conv.title ?? null);
     } catch (err) {
       // Roll back the optimistic question on failure.
       setMessages((prev) => prev.filter((m) => m.message_id !== optimistic.message_id));
@@ -152,7 +157,13 @@ export function DiscussionPage() {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-2xl flex-col">
-      <h1 className="text-lg font-semibold">Discussion</h1>
+      <BackLink
+        to={`/discussions/new?book=${encodeURIComponent(bookId)}`}
+        label="Back to discussions"
+      />
+      <h1 className="mt-2 truncate text-lg font-semibold">
+        {title || "New discussion"}
+      </h1>
       <p className="truncate text-sm text-slate-400">
         {bookTitle ?? "Your book"}
       </p>
