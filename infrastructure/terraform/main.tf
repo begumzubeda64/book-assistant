@@ -163,6 +163,9 @@ module "ai" {
   # GraphRAG chunk-entity-extraction model (EU inference-profile ARN).
   graph_construction_model_arn = var.graph_construction_model_arn
 
+  # Generation model for the reading/discussion agents (EU inference profile).
+  generation_model_id = var.generation_model_id
+
   # Agent runtimes (two-stage like compute: enable once agent images are pushed).
   deploy_agents = var.deploy_agents
   agent_image_uris = var.deploy_agents ? {

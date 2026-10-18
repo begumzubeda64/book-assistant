@@ -10,6 +10,10 @@ project     = "book-companion"
 # is the EU inference-profile ARN.
 graph_construction_model_arn = "arn:aws:bedrock:eu-central-1:169424236454:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
 
+# Generation model (reading/discussion). Sonnet 4.6 — verified invokable; Sonnet
+# 4 (20250514) is retired (EOL 2026-06-15) and caused InvokeModel to fail.
+generation_model_id = "eu.anthropic.claude-sonnet-4-6"
+
 # --- Domain-free demo: full stack over real HTTPS without a custom domain ---
 # ALB serves HTTP:80; a CloudFront distribution gives the API a real HTTPS
 # *.cloudfront.net URL (no mixed content, valid Cognito callback origin).

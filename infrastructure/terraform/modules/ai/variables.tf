@@ -54,11 +54,14 @@ variable "generation_model_id" {
     Bedrock model the reading/discussion agents use for generation (InvokeModel).
     In eu-central-1 the Anthropic Claude models are only invokable through an EU
     cross-Region inference profile, so this is the profile id (prefix eu.), e.g.
-    eu.anthropic.claude-sonnet-4-20250514-v1:0. Claude 3.5 Sonnet is end-of-life
-    on Bedrock (EOL 2026-03-01) and must not be used.
+    eu.anthropic.claude-sonnet-4-6. Pick a profile whose UNDERLYING model is not
+    retired: verify with
+      aws bedrock get-foundation-model-availability --model-id <id> --region eu-central-1
+    (a profile can be ACTIVE while the model it routes to is EOL). Sonnet 4
+    (20250514) and Claude 3.5 Sonnet are retired and must not be used.
   EOT
   type        = string
-  default     = "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+  default     = "eu.anthropic.claude-sonnet-4-6"
 }
 
 variable "graph_construction_model_arn" {

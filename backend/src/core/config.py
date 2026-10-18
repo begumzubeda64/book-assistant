@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     # is only invokable via an EU cross-Region inference profile (prefix "eu."),
     # so this is the profile id, not a bare model id. Claude 3.5 Sonnet is EOL on
     # Bedrock (2026-03-01) and must not be used.
-    generation_model_id: str = "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+    generation_model_id: str = "eu.anthropic.claude-sonnet-4-6"
 
     # AI cost-abuse protection: max expensive AI ops per user per window.
     ai_rate_limit_max: int = 20

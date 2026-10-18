@@ -54,6 +54,15 @@ variable "graph_construction_model_arn" {
   default     = ""
 }
 
+variable "generation_model_id" {
+  description = <<-EOT
+    Bedrock generation model (EU inference-profile id) for the reading/discussion
+    agents. Must be a profile whose underlying model is NOT retired.
+  EOT
+  type        = string
+  default     = "eu.anthropic.claude-sonnet-4-6"
+}
+
 variable "certificate_arn" {
   description = <<-EOT
     ACM certificate ARN for the ALB HTTPS listener. When empty (and
