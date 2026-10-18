@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from src.agents.discussion.agent import DiscussionAgent
+from src.agents.discussion.agent import DiscussionAgentProtocol
 from src.core.errors import NotFoundError
 from src.core.security.cognito import AuthenticatedUser
 from src.models.conversation import (
@@ -27,7 +27,7 @@ class DiscussionService:
         self,
         *,
         repository: ConversationRepository,
-        agent: DiscussionAgent,
+        agent: DiscussionAgentProtocol,
     ) -> None:
         self._repo = repository
         self._agent = agent

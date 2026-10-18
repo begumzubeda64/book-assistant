@@ -9,6 +9,7 @@ persistence is handled by the calling service.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from src.agents.discussion.graph import build_discussion_graph
 from src.agents.discussion.state import DiscussionState
@@ -19,6 +20,23 @@ from src.agents.shared.ports import GraphRAGRetrievalPort, TextGenerationPort
 class DiscussionAnswer:
     answer: str
     citations: list[dict[str, object]]
+
+
+class DiscussionAgentProtocol(Protocol):
+    """The discussion-agent surface the service depends on.
+
+    Satisfied by both the in-process DiscussionAgent and the API-side
+    RemoteDiscussionAgent (which invokes the discussion AgentCore runtime).
+    """
+
+    def answer(
+        self,
+        *,
+        user_id: str,
+        book_id: str,
+        question: str,
+        history: list[tuple[str, str]] | None = None,
+    ) -> DiscussionAnswer: ...
 
 
 class RemoteDiscussionAgent:

@@ -162,9 +162,11 @@ class McpKnowledgeBase:
     def ingest_chunks(
         self, *, user_id: str, book_id: str, chunks: list[PreparedChunk]  # noqa: ARG002
     ) -> str:
-        return self._client.call(
-            "ingest_to_knowledge_base",
-            {"book_id": book_id, "chunks": [c.model_dump() for c in chunks]},
+        return str(
+            self._client.call(
+                "ingest_to_knowledge_base",
+                {"book_id": book_id, "chunks": [c.model_dump() for c in chunks]},
+            )
         )
 
 
@@ -190,8 +192,10 @@ class McpTextGeneration:
         self._client = client
 
     def generate(self, *, prompt: str, max_words: int) -> str:
-        return self._client.call(
-            "generate_text", {"prompt": prompt, "max_words": max_words}
+        return str(
+            self._client.call(
+                "generate_text", {"prompt": prompt, "max_words": max_words}
+            )
         )
 
 
@@ -202,8 +206,11 @@ class McpReadingStore:
         self._client = client
 
     def store_reading(self, *, user_id: str, reading_id: str, payload: str) -> str:  # noqa: ARG002
-        return self._client.call(
-            "store_reading_result", {"reading_id": reading_id, "payload": payload}
+        return str(
+            self._client.call(
+                "store_reading_result",
+                {"reading_id": reading_id, "payload": payload},
+            )
         )
 
 
