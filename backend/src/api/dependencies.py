@@ -26,6 +26,7 @@ from src.core.security.cognito import AuthenticatedUser, CognitoJwtValidator
 if TYPE_CHECKING:
     from src.core.rate_limit import RateLimiter
     from src.repositories.reading_results import ReadingResultRepository
+    from src.services.book_deletion import BookDeletionProtocol
     from src.services.book_discovery import BookDiscoveryService
     from src.services.discussions import DiscussionService
     from src.services.jobs import JobService
@@ -317,6 +318,95 @@ def get_discussion_service(settings: SettingsDep) -> DiscussionService:
         scope_secret=settings.scope_signing_secret,
     )
     return DiscussionService(repository=repo, agent=agent)
+
+
+def get_book_deletion_service(settings: SettingsDep) -> BookDeletionProtocol:
+    """Build the BookDeletionService.
+
+    KB/GraphRAG removal goes through the MCP tool tier (the API holds no
+    Bedrock/KB permissions); the API deletes its own buckets/tables directly.
+    """
+    from src.agents.shared.mcp_client import McpToolClient, build_mcp_url
+    from src.services.book_deletion import BookDeletionService
+
+    if settings.use_local_mock:
+        from src.local_mock.container import get_local_mock_container
+
+        return get_local_mock_container().book_deletion
+
+    import boto3
+
+    uploads_bucket = settings.uploads_bucket_name
+    readings_bucket = settings.reading_results_bucket_name
+    conversations_table = settings.conversations_table_name
+    progress_table = settings.progress_table_name
+    mcp_arn = settings.mcp_runtime_arn
+    scope_secret = settings.scope_signing_secret
+    if not (
+        uploads_bucket
+        and readings_bucket
+        and conversations_table
+        and progress_table
+        and mcp_arn
+        and scope_secret
+    ):
+        raise ServiceUnavailableError("Book deletion is not configured")
+
+    s3 = boto3.client(
+        "s3", region_name=settings.aws_region, endpoint_url=settings.aws_endpoint_url
+    )
+    dynamodb = boto3.resource(
+        "dynamodb",
+        region_name=settings.aws_region,
+        endpoint_url=settings.dynamodb_endpoint_url,
+    )
+
+    # Per-request scope token (minted below) authorizes the KB delete for
+    # exactly this user; no book_id/user_id is trusted from the client.
+    client = McpToolClient(
+        url=build_mcp_url(settings.aws_region, mcp_arn),
+        region=settings.aws_region,
+        scope_token="",
+    )
+
+    return BookDeletionService(
+        s3_client=s3,
+        uploads_bucket=uploads_bucket,
+        reading_results_bucket=readings_bucket,
+        conversations_table=dynamodb.Table(conversations_table),
+        progress_table=dynamodb.Table(progress_table),
+        kb_deleter=_ScopedKbDeleter(client=client, secret=scope_secret),
+    )
+
+
+class _ScopedKbDeleter:
+    """Mints a per-request scope token bound to the user before the KB call."""
+
+    def __init__(self, *, client: object, secret: str) -> None:
+        self._client = client
+        self._secret = secret
+
+    def delete_book(self, *, user_id: str, book_id: str) -> int:
+        from src.agents.shared.mcp_client import (
+            McpKnowledgeBaseDeleter,
+            McpToolClient,
+        )
+        from src.mcp_server.scope import mint_scope_token
+
+        base = self._client
+        assert isinstance(base, McpToolClient)
+        token = mint_scope_token(
+            user_id=user_id, job_id="book-delete", secret=self._secret
+        )
+        scoped = base.with_scope_token(token)
+        return McpKnowledgeBaseDeleter(scoped).delete_book(
+            user_id=user_id, book_id=book_id
+        )
+
+
+BookDeletionServiceDep = Annotated[
+    "BookDeletionProtocol", Depends(get_book_deletion_service)
+]
 
 
 DiscussionServiceDep = Annotated[

@@ -110,9 +110,13 @@ module "ecs" {
     SCOPE_SECRET_ARN             = try(module.ai.scope_secret_arn, "")
   }
 
-  # The API invokes the discussion runtime; grant it (and the scope secret) when
-  # agents are deployed. No Bedrock data permissions on the API role.
-  api_invoke_runtime_arns = var.deploy_agents ? compact([module.ai.discussion_runtime_arn]) : []
+  # The API invokes the discussion runtime (chat) and the MCP runtime (book
+  # deletion -> KB cleanup). Granted when agents are deployed. No Bedrock data
+  # permissions on the API role.
+  api_invoke_runtime_arns = var.deploy_agents ? compact([
+    module.ai.discussion_runtime_arn,
+    module.ai.mcp_runtime_arn,
+  ]) : []
   api_secret_arns         = var.deploy_agents ? compact([module.ai.scope_secret_arn]) : []
 
   # Dispatcher: enabled once agents are deployed (needs their runtime ARNs).

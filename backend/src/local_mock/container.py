@@ -11,6 +11,7 @@ from functools import lru_cache
 
 from src.local_mock.integrations import (
     LocalBlobStore,
+    LocalBookDeletion,
     LocalContentStore,
     LocalKnowledgeBase,
     LocalReadingStore,
@@ -46,6 +47,15 @@ class LocalMockContainer:
             content=self.content,
             knowledge_base=self.knowledge_base,
             reading_store=self.reading_store,
+        )
+
+        # Book deletion over the same in-memory stores.
+        self.book_deletion = LocalBookDeletion(
+            blobs=self.blobs,
+            knowledge_base=self.knowledge_base,
+            reading_store=self.reading_store,
+            conversations=self.conversations,
+            progress=self.progress,
         )
 
 

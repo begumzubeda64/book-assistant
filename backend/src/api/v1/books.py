@@ -13,9 +13,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from src.api.dependencies import BookServiceDep, CurrentUser
+from src.api.dependencies import (
+    BookDeletionServiceDep,
+    BookServiceDep,
+    CurrentUser,
+)
 from src.core.errors import NotFoundError
+from src.core.logging import get_logger
 from src.schemas.books import BookMetadata, BookSearchResults
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -45,3 +52,21 @@ async def get_book(
             "The requested book could not be found", code="BOOK_NOT_FOUND"
         )
     return book
+
+
+@router.delete("/{book_id}", status_code=204)
+async def delete_book(
+    user: CurrentUser,
+    service: BookDeletionServiceDep,
+    book_id: str,
+) -> None:
+    """Delete all of the authenticated user's content for a book.
+
+    Removes the uploaded PDF, prepared chunks + KB/GraphRAG data, reading
+    results, conversations, and progress — scoped to the caller's own content.
+    Job records and logs are preserved as the audit trail; the deletion itself
+    is audit-logged. Idempotent: deleting an already-absent book still returns
+    204.
+    """
+    summary = service.delete_book(user_id=user.user_id, book_id=book_id)
+    logger.info("book_delete_requested", extra={"book_id": book_id, **summary})

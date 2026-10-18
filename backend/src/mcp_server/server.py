@@ -51,6 +51,7 @@ TOOL_ALLOWLIST = frozenset(
         "generate_text",
         "store_reading_result",
         "graphrag_retrieve",
+        "delete_book_from_knowledge_base",
     }
 )
 
@@ -195,6 +196,14 @@ def create_mcp_server(tools: ToolBundle, *, scope_secret: str) -> Any:
             user_id=scope.user_id, book_id=book_id, query=query, top_k=top_k
         )
         return [p.model_dump() for p in passages]
+
+    @server.tool(name="delete_book_from_knowledge_base")
+    def delete_book_from_knowledge_base(book_id: str, ctx: Context) -> int:
+        """Remove a book's chunks from the KB (user-scoped). Returns count."""
+        scope = _scope_from_context(ctx, scope_secret)
+        return tools.knowledge_base.delete_book(
+            user_id=scope.user_id, book_id=book_id
+        )
 
     return server
 

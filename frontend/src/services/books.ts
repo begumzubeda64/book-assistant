@@ -12,3 +12,10 @@ export function searchBooks(
 export function getBook(bookId: string): Promise<BookMetadata> {
   return apiFetch<BookMetadata>(`/api/v1/books/${encodeURIComponent(bookId)}`);
 }
+
+/** Delete all of the user's content for a book (returns 204). */
+export function deleteBook(bookId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/books/${encodeURIComponent(bookId)}`, {
+    method: "DELETE",
+  });
+}

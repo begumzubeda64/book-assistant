@@ -72,6 +72,43 @@ class KnowledgeBaseTool:
         )
         return ingestion_ref
 
+    def delete_book(self, *, user_id: str, book_id: str) -> int:
+        """Remove a book's prepared chunks from the KB, scoped to the user.
+
+        Deletes every chunk object under the user's per-book prefix, then
+        re-triggers an ingestion sync so the managed pipeline reconciles the
+        removed source documents out of the Neptune graph. Returns the number of
+        chunk objects deleted.
+        """
+        prefix = chunk_prefix(user_id, book_id)
+        paginator = self._s3.get_paginator("list_objects_v2")
+        to_delete: list[dict[str, str]] = []
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+            for obj in page.get("Contents", []) or []:
+                to_delete.append({"Key": obj["Key"]})
+
+        deleted = 0
+        # delete_objects takes up to 1000 keys per call.
+        for i in range(0, len(to_delete), 1000):
+            batch = to_delete[i : i + 1000]
+            if not batch:
+                continue
+            self._s3.delete_objects(
+                Bucket=self._bucket, Delete={"Objects": batch}
+            )
+            deleted += len(batch)
+
+        if deleted:
+            # Re-sync so the graph drops the removed documents.
+            self._bedrock.start_ingestion_job(
+                knowledgeBaseId=self._kb_id, dataSourceId=self._data_source_id
+            )
+        logger.info(
+            "kb_book_deleted",
+            extra={"book_id": book_id, "deleted_chunk_objects": deleted},
+        )
+        return deleted
+
     @staticmethod
     def _serialize(chunk: PreparedChunk, user_id: str) -> bytes:
         # Preserve provenance and the ownership boundary alongside the text.

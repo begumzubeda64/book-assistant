@@ -84,6 +84,12 @@ class McpToolClient:
         self._region = region
         self._scope_token = scope_token
 
+    def with_scope_token(self, scope_token: str) -> McpToolClient:
+        """Return a copy bound to a different per-request scope token."""
+        return McpToolClient(
+            url=self._url, region=self._region, scope_token=scope_token
+        )
+
     def call(self, name: str, arguments: dict[str, Any]) -> Any:
         import asyncio
 
@@ -212,6 +218,22 @@ class McpReadingStore:
                 {"reading_id": reading_id, "payload": payload},
             )
         )
+
+
+class McpKnowledgeBaseDeleter:
+    """Removes a book's KB data via the MCP tool (KnowledgeBaseDeleter port)."""
+
+    def __init__(self, client: McpToolClient) -> None:
+        self._client = client
+
+    def delete_book(self, *, user_id: str, book_id: str) -> int:  # noqa: ARG002
+        result = self._client.call(
+            "delete_book_from_knowledge_base", {"book_id": book_id}
+        )
+        try:
+            return int(result)
+        except (TypeError, ValueError):
+            return 0
 
 
 class McpGraphRAGRetrieval:

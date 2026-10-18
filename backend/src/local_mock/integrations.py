@@ -161,3 +161,59 @@ def _text_as_pdf(text: str) -> bytes:
     and reads the text back directly.
     """
     return b"%PDF-LOCALMOCK%" + text.encode("utf-8")
+
+
+class LocalBookDeletion:
+    """Local mock of BookDeletionService over the in-memory stores."""
+
+    def __init__(
+        self,
+        *,
+        blobs: LocalBlobStore,
+        knowledge_base: LocalKnowledgeBase,
+        reading_store: LocalReadingStore,
+        conversations: Any,
+        progress: Any,
+    ) -> None:
+        self._blobs = blobs
+        self._kb = knowledge_base
+        self._readings = reading_store
+        self._conversations = conversations
+        self._progress = progress
+
+    def delete_book(self, *, user_id: str, book_id: str) -> dict[str, int | bool]:
+        from src.integrations.s3_storage import build_upload_key
+
+        pdf_key = build_upload_key(user_id, book_id)
+        deleted_pdf = self._blobs.objects.pop(pdf_key, None) is not None
+
+        chunks = self._kb._chunks.pop((user_id, book_id), None)  # noqa: SLF001
+        deleted_chunks = len(chunks) if chunks else 0
+
+        readings = [
+            k
+            for k, v in self._readings.results.items()
+            if k.startswith(f"{user_id}/") and v.get("book_id") == book_id
+        ]
+        for k in readings:
+            self._readings.results.pop(k, None)
+
+        convs = [
+            key
+            for key, c in self._conversations._items.items()  # noqa: SLF001
+            if key[0] == user_id and c.book_id == book_id
+        ]
+        for key in convs:
+            self._conversations._items.pop(key, None)  # noqa: SLF001
+
+        deleted_progress = (
+            self._progress._items.pop((user_id, book_id), None) is not None  # noqa: SLF001
+        )
+
+        return {
+            "deleted_pdf": deleted_pdf,
+            "deleted_chunks": deleted_chunks,
+            "deleted_readings": len(readings),
+            "deleted_conversations": len(convs),
+            "deleted_progress": deleted_progress,
+        }

@@ -38,7 +38,11 @@ export function LibraryPage() {
         ) : (
           <ul className="space-y-2">
             {books.map((book) => (
-              <LibraryBookRow key={book.bookId} book={book} />
+              <LibraryBookRow
+                key={book.bookId}
+                book={book}
+                onRemoved={refresh}
+              />
             ))}
           </ul>
         )}

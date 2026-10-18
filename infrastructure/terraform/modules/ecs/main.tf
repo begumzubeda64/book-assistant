@@ -78,10 +78,18 @@ resource "aws_iam_role_policy" "api_task" {
         Resource = var.dynamodb_table_arns
       },
       {
-        Sid      = "S3Uploads"
+        # Presign + read results, and delete a user's own content on book
+        # deletion. ListBucket is needed to enumerate a user's readings.
+        Sid      = "S3Objects"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject"]
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = [for b in var.app_bucket_arns : "${b}/*"]
+      },
+      {
+        Sid      = "S3List"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = var.app_bucket_arns
       },
       {
         Sid      = "Sqs"
