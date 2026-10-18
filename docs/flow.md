@@ -258,9 +258,13 @@ GET /api/v1/reading/{reading_id} → S3ReadingResultRepository (user-scoped) →
 ```
 
 The reading list only returns COMPLETED readings (an in-progress one has no
-result to open). The config page shows a local "preparing…" pending row the
-instant generation starts (disabled View), and the Library flips to "Continue
-reading" immediately via a local flag; both reconcile with the backend on focus.
+result to open). The config page shows a "preparing…" pending row the instant
+generation starts (disabled View); the pending reading is persisted in a local
+per-user store (`stores/readingActivity.ts`) so the row survives navigation
+until the job completes, then is reconciled against the backend list (by
+jobId == reading_id) and replaced by the real, viewable reading. The Library
+flips to "Continue reading" immediately via a local flag; all reconcile with the
+backend on focus.
 
 - reading_id == job_id. Ranking never just takes the first N words.
 - Output is coherent prose within a generous word-budget tolerance (req 4.5);

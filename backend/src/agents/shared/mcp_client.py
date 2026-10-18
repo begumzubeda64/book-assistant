@@ -160,6 +160,13 @@ class McpToolClient:
                         meta={"scope_token": self._scope_token},
                         progress_callback=_on_progress,
                     )
+                # A tool failure comes back as a result with isError=True whose
+                # content is the error text — never treat that as the answer.
+                if getattr(result, "isError", False):
+                    msg = _unwrap(result)
+                    raise RuntimeError(
+                        str(msg) if msg else "tool call failed"
+                    )
                 # The tool ALSO returns the complete text. Progress
                 # notifications (our live deltas) may not survive the AgentCore
                 # MCP transport (the server->client GET SSE channel can 405), so

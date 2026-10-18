@@ -349,7 +349,14 @@ resource "aws_iam_role_policy" "mcp_exec" {
       {
         Sid    = "Bedrock"
         Effect = "Allow"
-        Action = ["bedrock:InvokeModel", "bedrock:Retrieve", "bedrock:StartIngestionJob"]
+        Action = [
+          "bedrock:InvokeModel",
+          # Streaming generation (discussion streaming tool) needs the
+          # response-stream action in addition to plain InvokeModel.
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:Retrieve",
+          "bedrock:StartIngestionJob",
+        ]
         Resource = [
           "arn:aws:bedrock:*::foundation-model/${local.graph_construction_model_id}",
           "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.generation_model_id}",

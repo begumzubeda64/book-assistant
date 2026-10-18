@@ -11,7 +11,13 @@ import {
 } from "@/services/reading";
 import { pollJob } from "@/services/jobs";
 import { friendlyError, friendlyJobFailure } from "@/services/errors";
-import { markReadingStarted } from "@/stores/readingActivity";
+import {
+  addPendingReading,
+  listPendingReadings,
+  markReadingStarted,
+  removePendingReading,
+  type PendingReading,
+} from "@/stores/readingActivity";
 import { getUploadedBook } from "@/stores/uploadedBooks";
 import {
   READING_FOCUSES,
@@ -43,7 +49,7 @@ function formatWhen(iso: string): string {
 // takeover, and surface a "ready" nudge (with a reading id to open) when done.
 type GenState =
   | { kind: "idle" }
-  | { kind: "generating"; mode: ReadingMode; focus: ReadingFocus; minutes: number }
+  | { kind: "generating" }
   | { kind: "ready"; readingId: string }
   | { kind: "error"; message: string };
 
@@ -58,15 +64,28 @@ export function ReadingConfigPage() {
   const [focus, setFocus] = useState<ReadingFocus>("key_ideas");
   const [gen, setGen] = useState<GenState>({ kind: "idle" });
   const [existing, setExisting] = useState<ReadingSummary[]>([]);
+  const [pending, setPending] = useState<PendingReading[]>([]);
 
   const selectedMode = READING_MODES.find((m) => m.value === mode)!;
 
   const refreshExisting = useCallback(() => {
     if (!bookId) return;
+    if (user) setPending(listPendingReadings(user.userId, bookId));
     listReadings(bookId)
-      .then(setExisting)
+      .then((readings) => {
+        setExisting(readings);
+        // A completed reading's job id matches its pending entry; drop any
+        // pending rows that now have a real result so they don't duplicate.
+        if (user) {
+          const ids = new Set(readings.map((r) => r.reading_id));
+          for (const p of listPendingReadings(user.userId, bookId)) {
+            if (ids.has(p.jobId)) removePendingReading(user.userId, p.jobId);
+          }
+          setPending(listPendingReadings(user.userId, bookId));
+        }
+      })
       .catch(() => setExisting([]));
-  }, [bookId]);
+  }, [bookId, user]);
 
   // Refresh on mount and whenever the tab regains focus, so a reading that
   // finishes while the user is elsewhere appears in the list on return (the
@@ -87,12 +106,7 @@ export function ReadingConfigPage() {
 
   async function handleGenerate() {
     if (!bookId || gen.kind === "generating") return;
-    setGen({
-      kind: "generating",
-      mode,
-      focus,
-      minutes: selectedMode.minutes,
-    });
+    setGen({ kind: "generating" });
     // Record locally that a reading was started for this book, so the Library
     // shows "Continue reading" immediately — without waiting for generation to
     // finish or for the user to open the result.
@@ -111,26 +125,42 @@ export function ReadingConfigPage() {
         refreshExisting();
         return;
       }
+      // Persist the in-flight reading so its "preparing…" row survives
+      // navigation until the job completes.
+      if (user) {
+        addPendingReading(user.userId, {
+          jobId: job.job_id,
+          bookId,
+          mode,
+          focus,
+          minutes: selectedMode.minutes,
+          startedAt: new Date().toISOString(),
+        });
+        setPending(listPendingReadings(user.userId, bookId));
+      }
       // Poll in the BACKGROUND. The page stays interactive and we never force a
       // redirect — the user opens the reading when they choose.
       pollJob(job.job_id, { intervalMs: 3000, maxAttempts: 100 })
         .then((final) => {
+          if (user) removePendingReading(user.userId, job.job_id);
           if (final.status === "FAILED") {
             setGen({ kind: "error", message: friendlyJobFailure("reading") });
           } else {
             setGen({ kind: "ready", readingId: job.job_id });
-            refreshExisting();
           }
+          refreshExisting();
         })
-        .catch((err: unknown) =>
+        .catch((err: unknown) => {
+          if (user) removePendingReading(user.userId, job.job_id);
+          setPending(user ? listPendingReadings(user.userId, bookId) : []);
           setGen({
             kind: "error",
             message: friendlyError(
               err,
               "We couldn't create this reading. Please try again.",
             ),
-          }),
-        );
+          });
+        });
     } catch (err) {
       setGen({
         kind: "error",
@@ -236,23 +266,27 @@ export function ReadingConfigPage() {
           : `Generate ${selectedMode.minutes}-minute reading`}
       </button>
 
-      {(existing.length > 0 || gen.kind === "generating") && (
+      {(existing.length > 0 || pending.length > 0) && (
         <section className="mt-10 border-t border-slate-200 pt-6">
           <h2 className="text-sm font-medium text-slate-500">
             Your readings for this book
           </h2>
           <ul className="mt-2 space-y-2">
-            {/* Pending reading: shown the instant generation starts, with a
-                disabled View and a friendly "ready soon" note. */}
-            {gen.kind === "generating" && (
-              <li className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+            {/* Pending readings: persisted locally, so the "preparing…" row
+                survives navigation until the job completes. Disabled View with
+                a friendly note. */}
+            {pending.map((p) => (
+              <li
+                key={p.jobId}
+                className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3"
+              >
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-700">
                     <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-                    {modeLabel(gen.mode)} · {focusLabel(gen.focus)}
+                    {modeLabel(p.mode)} · {focusLabel(p.focus)}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {gen.minutes}-minute read · preparing your reading — you can
+                    {p.minutes}-minute read · preparing your reading — you can
                     open it here as soon as it&apos;s ready.
                   </p>
                 </div>
@@ -265,7 +299,7 @@ export function ReadingConfigPage() {
                   Preparing…
                 </button>
               </li>
-            )}
+            ))}
             {existing.map((r) => (
               <li
                 key={r.reading_id}

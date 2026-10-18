@@ -615,3 +615,33 @@ change. The buffered-to-UI reveal remains comfortable to read either way.
 
 **Status.** Accepted. Fixes the empty-answer regression from the initial
 streaming build.
+
+---
+
+## 2026-10-18 — Streaming IAM, tool-error containment, and persisted pending readings
+
+**Decisions.**
+1. **IAM.** The MCP execution role is granted `bedrock:InvokeModelWithResponseStream`
+   in addition to `bedrock:InvokeModel` (`modules/ai`). The streaming generation
+   tool uses the response-stream API, which is a distinct IAM action; without it
+   the tool raised `AccessDeniedException`.
+2. **Tool-error containment.** `McpToolClient.call_stream` now checks the MCP
+   result's `isError` flag and raises, instead of returning the tool's error
+   text as the answer. A tool failure therefore surfaces as a stream `error`
+   event (friendly message in the UI), never as streamed answer content.
+3. **Persisted pending readings.** In-flight readings are recorded in a local
+   per-user store (`stores/readingActivity.ts` `PendingReading`: jobId + config),
+   so the "preparing…" row on the reading page survives navigation until the job
+   completes. On completion the pending entry is dropped (reconciled against the
+   backend list by jobId == reading_id) and the real, viewable reading replaces
+   it. Previously the pending row was transient component state and vanished on
+   navigation.
+
+**Why.** Live testing surfaced two real bugs: a Bedrock `AccessDeniedException`
+for the streaming action was being shown as the chat "answer", and the pending
+reading row disappeared when navigating away. (1) fixes the permission at the
+source; (2) ensures a tool error is never mistaken for content regardless of
+cause; (3) makes the pending-reading UX durable like the uploaded-books and
+reading-started local registries already are.
+
+**Status.** Accepted.
