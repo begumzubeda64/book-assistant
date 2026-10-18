@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/useAuth";
 import { deleteBook } from "@/services/books";
+import { listConversations } from "@/services/discussions";
 import { friendlyError } from "@/services/errors";
 import { getProgress } from "@/services/progress";
 import { removeUploadedBook, type UploadedBook } from "@/stores/uploadedBooks";
@@ -23,6 +24,7 @@ export function LibraryBookRow({
 }) {
   const { user } = useAuth();
   const [progress, setProgress] = useState<ProgressResponse | null>(null);
+  const [hasDiscussions, setHasDiscussions] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
@@ -51,6 +53,13 @@ export function LibraryBookRow({
     getProgress(book.bookId)
       .then((p) => {
         if (!cancelled) setProgress(p);
+      })
+      .catch(() => {});
+    // Does this book already have discussions? If so, offer a "Discussions"
+    // shortcut to the thread list.
+    listConversations(book.bookId)
+      .then((convos) => {
+        if (!cancelled) setHasDiscussions(convos.length > 0);
       })
       .catch(() => {});
     return () => {
@@ -90,7 +99,7 @@ export function LibraryBookRow({
             to={`/discussions/new?book=${encodeURIComponent(book.bookId)}`}
             className="rounded border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-100"
           >
-            Discuss
+            {hasDiscussions ? "Discussions" : "Discuss"}
           </Link>
           <button
             onClick={() => void handleRemove()}

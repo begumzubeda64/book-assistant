@@ -1,27 +1,59 @@
-"""Tests for context-based conversation titling from the first question."""
+"""Tests for intent-based conversation titling (LLM-generated, short)."""
 
 from __future__ import annotations
 
+from src.agents.discussion import nodes
+from src.agents.discussion.agent import DiscussionAgent, DiscussionAnswer
+from src.agents.shared.ports import RetrievedPassage
 from src.core.security.cognito import AuthenticatedUser
 from src.models.conversation import Conversation
-from src.services.discussions import DiscussionService, _title_from_question
 
 
-def test_title_from_short_question_is_verbatim() -> None:
-    assert _title_from_question("What is the main argument?") == (
-        "What is the main argument?"
+def test_clean_title_trims_quotes_and_caps_words() -> None:
+    assert nodes.clean_title('"The Author\'s View"') == "The Author's View"
+    assert nodes.clean_title("one two three four five six seven") == (
+        "one two three four five"
     )
+    assert nodes.clean_title("   ") == "Discussion"
 
 
-def test_title_from_long_question_is_trimmed_on_word_boundary() -> None:
-    q = (
-        "Do you think the society at those times had major roles in the "
-        "socio-economic background of arranging marriages as described"
+class _TitleGenerator:
+    """Echo generator that returns a scripted title for title prompts."""
+
+    def __init__(self, title: str) -> None:
+        self._title = title
+
+    def generate(self, *, prompt: str, max_words: int) -> str:
+        if prompt.endswith("TITLE:"):
+            return self._title
+        return "A grounded answer."
+
+
+class _FakeRetriever:
+    def retrieve(self, **_kwargs) -> list[RetrievedPassage]:
+        return []
+
+
+def test_agent_generates_short_title_on_opening_turns() -> None:
+    agent = DiscussionAgent(
+        retriever=_FakeRetriever(), generator=_TitleGenerator("Marriage And Society")
     )
-    title = _title_from_question(q)
-    assert len(title) <= 61  # 60 + ellipsis
-    assert title.endswith("…")
-    assert not title.endswith(" …")  # trimmed at a word boundary
+    result = agent.answer(user_id="u1", book_id="b1", question="real topic?")
+    assert result.title == "Marriage And Society"
+
+
+def test_agent_stops_titling_after_opening_turns() -> None:
+    agent = DiscussionAgent(
+        retriever=_FakeRetriever(), generator=_TitleGenerator("Later Topic")
+    )
+    long_history = [
+        ("user" if i % 2 == 0 else "assistant", f"turn {i}")
+        for i in range(nodes.TITLE_REFRESH_TURNS + 2)
+    ]
+    result = agent.answer(
+        user_id="u1", book_id="b1", question="q", history=long_history
+    )
+    assert result.title is None  # title has stabilized
 
 
 class _FakeRepo:
@@ -40,40 +72,22 @@ class _FakeRepo:
 
 
 class _FakeAgent:
-    def answer(self, **_kwargs):
-        from src.agents.discussion.agent import DiscussionAnswer
+    def __init__(self, title: str | None) -> None:
+        self._title = title
 
-        return DiscussionAnswer(answer="ok", citations=[], updated_summary=None)
+    def answer(self, **_kwargs) -> DiscussionAnswer:
+        return DiscussionAnswer(
+            answer="ok", citations=[], updated_summary=None, title=self._title
+        )
 
 
-async def test_first_question_sets_conversation_title() -> None:
+async def test_service_persists_agent_title() -> None:
     conv = Conversation(user_id="u1", conversation_id="c1", book_id="b1")
     repo = _FakeRepo(conv)
-    service = DiscussionService(repository=repo, agent=_FakeAgent())  # type: ignore[arg-type]
-    user = AuthenticatedUser(user_id="u1")
+    from src.services.discussions import DiscussionService
 
-    await service.post_message(user, "c1", "How does the author define freedom?")
-
-    assert repo.title_set == "How does the author define freedom?"
-
-
-async def test_title_not_overwritten_once_set() -> None:
-    conv = Conversation(
-        user_id="u1",
-        conversation_id="c1",
-        book_id="b1",
-        title="Existing title",
-    )
-    # Simulate an existing message so it's not the first turn.
-    from src.models.conversation import Message, MessageRole
-
-    conv.messages.append(
-        Message(message_id="m0", role=MessageRole.USER, content="earlier")
-    )
-    repo = _FakeRepo(conv)
-    service = DiscussionService(repository=repo, agent=_FakeAgent())  # type: ignore[arg-type]
+    service = DiscussionService(repository=repo, agent=_FakeAgent("Key Themes"))  # type: ignore[arg-type]
     await service.post_message(
-        AuthenticatedUser(user_id="u1"), "c1", "a follow-up question"
+        AuthenticatedUser(user_id="u1"), "c1", "what are the themes?"
     )
-    # No new title passed (stays as the existing one).
-    assert repo.title_set is None
+    assert repo.title_set == "Key Themes"

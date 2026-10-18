@@ -47,6 +47,33 @@ def build_grounded_prompt(
     )
 
 
+# Re-evaluate the title during the opening turns so a casual opener ("hi") gets
+# replaced once a real topic emerges; after this it stays stable.
+TITLE_REFRESH_TURNS = 6  # ~3 exchanges (user+assistant)
+
+
+def build_title_prompt(history: list[tuple[str, str]], question: str) -> str:
+    """Prompt for a very short, intent-based conversation title (2-3 words)."""
+    recent = history[-TITLE_REFRESH_TURNS:]
+    convo = "\n".join(f"{role}: {content}" for role, content in recent)
+    return (
+        "Give a 2-3 word title (max ~4 words) capturing the TOPIC/intent of "
+        "this book discussion. If it's just small talk or a greeting with no "
+        'real topic yet, answer exactly "General chat". Return only the title, '
+        "no quotes, no punctuation at the end.\n\n"
+        f"CONVERSATION:\n{convo}\nuser: {question}\n\nTITLE:"
+    )
+
+
+def clean_title(raw: str) -> str:
+    """Normalize a model-generated title to a short, clean label."""
+    text = " ".join(raw.strip().strip('"').strip().split())
+    words = text.split()
+    if len(words) > 5:
+        text = " ".join(words[:5])
+    return text[:60] or "Discussion"
+
+
 def build_summary_prompt(
     prior_summary: str | None, aged_out: list[tuple[str, str]]
 ) -> str:

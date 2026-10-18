@@ -23,11 +23,21 @@ class FakeRetriever:
 
 class EchoGenerator:
     def __init__(self) -> None:
-        self.last_prompt = ""
+        self.prompts: list[str] = []
 
     def generate(self, *, prompt: str, max_words: int) -> str:
-        self.last_prompt = prompt
+        self.prompts.append(prompt)
+        if prompt.rstrip().endswith("TITLE:"):
+            return "A Title"
         return "A grounded answer."
+
+    @property
+    def answer_prompt(self) -> str:
+        """The grounded-answer prompt (not the title/summary prompts)."""
+        for p in self.prompts:
+            if "SOURCE MATERIAL" in p and "TITLE:" not in p:
+                return p
+        return ""
 
 
 def _passages() -> list[RetrievedPassage]:
@@ -83,9 +93,9 @@ def test_prompt_instructs_grounding_and_includes_context() -> None:
         question="q",
         history=[("user", "earlier question"), ("assistant", "earlier answer")],
     )
-    assert "ground every factual claim in the SOURCE MATERIAL" in gen.last_prompt
-    assert "earlier question" in gen.last_prompt
-    assert "b:p10:s0" in gen.last_prompt
+    assert "ground every factual claim in the SOURCE MATERIAL" in gen.answer_prompt
+    assert "earlier question" in gen.answer_prompt
+    assert "b:p10:s0" in gen.answer_prompt
 
 
 def test_short_thread_has_no_summary() -> None:
@@ -113,7 +123,7 @@ def test_long_thread_folds_older_turns_into_summary() -> None:
     # A summary was produced (the echo generator returns its canned text), and
     # the summary prompt folded in the aged-out turns.
     assert result.updated_summary is not None
-    assert "UPDATED SUMMARY" in gen.last_prompt
+    assert any("UPDATED SUMMARY" in p for p in gen.prompts)
 
 
 def test_summary_is_passed_into_the_prompt() -> None:
@@ -125,8 +135,8 @@ def test_summary_is_passed_into_the_prompt() -> None:
         question="q",
         summary="Earlier, the user asked about the setting.",
     )
-    assert "EARLIER CONVERSATION SUMMARY" in gen.last_prompt
-    assert "asked about the setting" in gen.last_prompt
+    assert "EARLIER CONVERSATION SUMMARY" in gen.answer_prompt
+    assert "asked about the setting" in gen.answer_prompt
 
 
 def test_passages_to_citations_dedupes() -> None:

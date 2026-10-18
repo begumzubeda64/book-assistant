@@ -26,6 +26,9 @@ class DiscussionAnswer:
     # Updated running summary of older turns (memory management); None when the
     # thread is short enough that no summary is needed yet.
     updated_summary: str | None = None
+    # A short, intent-based title (2-3 words), (re)generated during the opening
+    # turns; None when the title shouldn't change this turn.
+    title: str | None = None
 
 
 class DiscussionAgentProtocol(Protocol):
@@ -92,6 +95,7 @@ class RemoteDiscussionAgent:
             answer=result.get("answer", ""),
             citations=result.get("citations", []),
             updated_summary=result.get("updated_summary"),
+            title=result.get("title"),
         )
 
 
@@ -140,8 +144,18 @@ class DiscussionAgent:
                     prompt=summary_prompt, max_words=200
                 ).strip()
 
+        # Intent-based title: (re)generate during the opening turns so a casual
+        # opener gets replaced once a real topic emerges, then it stabilizes.
+        title: str | None = None
+        if len(turns) <= nodes.TITLE_REFRESH_TURNS:
+            title_prompt = nodes.build_title_prompt(turns, question)
+            title = nodes.clean_title(
+                self._generator.generate(prompt=title_prompt, max_words=8)
+            )
+
         return DiscussionAnswer(
             answer=result.get("answer", ""),
             citations=result.get("citations", []),
             updated_summary=updated_summary,
+            title=title,
         )

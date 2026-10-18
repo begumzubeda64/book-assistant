@@ -69,6 +69,7 @@ def handler(payload: dict[str, Any]) -> dict[str, Any]:
         "answer": answer.answer,
         "citations": answer.citations,
         "updated_summary": answer.updated_summary,
+        "title": answer.title,
     }
 
 
