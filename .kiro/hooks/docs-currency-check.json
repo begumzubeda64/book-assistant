@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Docs currency check",
+      "trigger": "Stop",
+      "action": {
+        "type": "agent",
+        "prompt": "Before finishing: if this turn changed a boundary, tier, endpoint, service, integration, agent behavior, frontend flow, or runtime/deploy behavior, confirm that docs/flow.md was updated to match. If this turn involved a meaningful or non-obvious decision (architecture, tradeoff, model/infra choice, or UX behavior reflecting a decision), confirm that a new dated entry was appended to docs/decisions.md (never rewrite history; supersede instead). If either doc needs an update and it was not made, make the update now. If no doc change is warranted, state briefly why."
+      }
+    }
+  ]
+}

@@ -14,7 +14,17 @@ Follow this order:
 4. Implement the smallest complete vertical slice.
 5. Add tests.
 6. Validate locally.
-7. Update documentation when architecture or behavior changes.
+7. Update documentation when architecture or behavior changes. Specifically:
+   - **`docs/flow.md`** — update whenever a boundary, tier, endpoint, or
+     user-facing flow changes (new/changed route, service, integration, agent
+     behavior, frontend journey, or runtime/deploy behavior). It is a *living
+     map*; keep it accurate.
+   - **`docs/decisions.md`** — append a new **dated** entry whenever a
+     meaningful or non-obvious decision is taken or changed (architecture,
+     tradeoffs, model/infra choices, UX behavior that reflects a decision).
+     Never rewrite history: supersede an old entry with a new one and mark the
+     old as superseded.
+   This applies to live-deploy / bug-fix / UX work too, not just new features.
 
 Kiro should not introduce a new AWS service, framework, database, library, or architectural pattern without a concrete requirement.
 
@@ -153,7 +163,8 @@ A feature is complete only when:
 - tests exist
 - errors are handled
 - logs/metrics are adequate
-- documentation is updated
+- documentation is updated, including `docs/flow.md` when a flow/boundary/
+  endpoint changed and a dated `docs/decisions.md` entry when a decision was made
 - local development works
 - Terraform is updated when infrastructure changes
 - no unnecessary service or dependency was introduced
