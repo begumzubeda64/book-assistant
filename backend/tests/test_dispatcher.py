@@ -40,14 +40,26 @@ class FakeInvoker:
             raise RuntimeError("invoke failed")
 
 
+_SECRET = "test-scope-secret"
+
+
 def _dispatcher(consumer: FakeConsumer, invoker: FakeInvoker) -> JobDispatcher:
-    return JobDispatcher(consumer=consumer, invoker=invoker, runtime_arns=RUNTIMES)
+    return JobDispatcher(
+        consumer=consumer,
+        invoker=invoker,
+        runtime_arns=RUNTIMES,
+        scope_secret=_SECRET,
+    )
+
+
+def _body(**extra: Any) -> str:
+    base = {"job_id": "j1", "user_id": "u1"}
+    base.update(extra)
+    return json.dumps(base)
 
 
 def test_routes_ingestion_to_ingestion_runtime() -> None:
-    consumer = FakeConsumer(
-        [json.dumps({"job_id": "j1", "job_type": "BOOK_INGESTION"})]
-    )
+    consumer = FakeConsumer([_body(job_type="BOOK_INGESTION")])
     invoker = FakeInvoker()
     n = _dispatcher(consumer, invoker).process_once()
     assert n == 1
@@ -56,18 +68,36 @@ def test_routes_ingestion_to_ingestion_runtime() -> None:
 
 
 def test_routes_reading_to_adaptive_runtime() -> None:
-    consumer = FakeConsumer(
-        [json.dumps({"job_id": "r1", "job_type": "ADAPTIVE_READING"})]
-    )
+    consumer = FakeConsumer([_body(job_id="r1", job_type="ADAPTIVE_READING")])
     invoker = FakeInvoker()
     _dispatcher(consumer, invoker).process_once()
     assert invoker.calls[0][0] == RUNTIMES["adaptive"]
 
 
+def test_invoke_payload_carries_verifiable_scope_token() -> None:
+    from src.mcp_server.scope import verify_scope_token
+
+    consumer = FakeConsumer([_body(job_type="BOOK_INGESTION")])
+    invoker = FakeInvoker()
+    _dispatcher(consumer, invoker).process_once()
+
+    _, payload = invoker.calls[0]
+    scope = verify_scope_token(payload["scope_token"], secret=_SECRET)
+    assert scope.user_id == "u1"
+    assert scope.job_id == "j1"
+
+
+def test_message_without_user_id_is_dropped() -> None:
+    body = json.dumps({"job_id": "j1", "job_type": "BOOK_INGESTION"})
+    consumer = FakeConsumer([body])
+    invoker = FakeInvoker()
+    _dispatcher(consumer, invoker).process_once()
+    assert invoker.calls == []
+    assert consumer.deleted == ["rh-0"]
+
+
 def test_failed_invoke_leaves_message_for_redelivery() -> None:
-    consumer = FakeConsumer(
-        [json.dumps({"job_id": "j1", "job_type": "BOOK_INGESTION"})]
-    )
+    consumer = FakeConsumer([_body(job_type="BOOK_INGESTION")])
     invoker = FakeInvoker(fail=True)
     n = _dispatcher(consumer, invoker).process_once()
     assert n == 0
@@ -75,7 +105,7 @@ def test_failed_invoke_leaves_message_for_redelivery() -> None:
 
 
 def test_unknown_job_type_is_dropped() -> None:
-    consumer = FakeConsumer([json.dumps({"job_id": "x", "job_type": "DISCUSSION"})])
+    consumer = FakeConsumer([_body(job_id="x", job_type="DISCUSSION")])
     invoker = FakeInvoker()
     _dispatcher(consumer, invoker).process_once()
     assert invoker.calls == []
@@ -92,8 +122,8 @@ def test_malformed_message_is_dropped() -> None:
 
 def test_batch_dispatches_each_message() -> None:
     consumer = FakeConsumer([
-        json.dumps({"job_id": "a", "job_type": "BOOK_INGESTION"}),
-        json.dumps({"job_id": "b", "job_type": "ADAPTIVE_READING"}),
+        _body(job_id="a", job_type="BOOK_INGESTION"),
+        _body(job_id="b", job_type="ADAPTIVE_READING"),
     ])
     invoker = FakeInvoker()
     n = _dispatcher(consumer, invoker).process_once()

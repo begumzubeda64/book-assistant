@@ -30,6 +30,10 @@ locals {
   # InvokeModel on the foundation model the profile routes to.
   graph_construction_profile_id = element(split("/", local.graph_construction_model_arn), 1)
   graph_construction_model_id   = replace(local.graph_construction_profile_id, "/^(eu|us|apac|global)[.]/", "")
+
+  # Underlying foundation-model id behind the generation inference profile,
+  # used to grant the MCP role InvokeModel on the model the profile routes to.
+  generation_model_base_id = replace(var.generation_model_id, "/^(eu|us|apac|global)[.]/", "")
 }
 
 # --- Prepared-chunk store (ingested content, ownership-scoped by key prefix) ---
@@ -196,13 +200,17 @@ resource "awscc_bedrock_data_source" "chunks" {
   }
 }
 
-# --- Agent tier: AgentCore runtimes (one isolated image per agent) ---
+# --- Agent + tool tier: AgentCore runtimes ---
 #
-# Created when deploy_agents=true and the agent images exist in ECR (two-stage,
-# like the ALB/ECS compute). Each agent runs as its own runtime so they deploy,
-# scale, and fail independently (decisions.md). A single least-privilege
-# execution role is scoped to the KB, chunk/upload/result buckets, job +
-# conversation tables, SQS, and Bedrock inference/retrieval.
+# Created when deploy_agents=true and the images exist in ECR (two-stage, like
+# the ALB/ECS compute). Architecture (decisions.md, security.md):
+#   * Three ISOLATED agent runtimes (ingestion, adaptive, discussion), each its
+#     own image, deploying/scaling/failing independently.
+#   * One MCP tool-server runtime holding ALL AWS data permissions. Agents hold
+#     none; they reach tools only via InvokeAgentRuntime on the MCP runtime.
+#   * A per-job scope secret (Secrets Manager) signs the trusted user_id so a
+#     compromised agent cannot act as another user. Only the MCP server and the
+#     dispatcher/API read it.
 
 locals {
   agents = var.deploy_agents ? {
@@ -210,6 +218,118 @@ locals {
     adaptive   = try(var.agent_image_uris["adaptive"], "")
     discussion = try(var.agent_image_uris["discussion"], "")
   } : {}
+}
+
+# --- Scope-signing secret (Secrets Manager) ---
+resource "aws_secretsmanager_secret" "scope" {
+  count                   = var.deploy_agents ? 1 : 0
+  name                    = "${var.name_prefix}-scope-signing-secret"
+  recovery_window_in_days = 0
+}
+
+resource "random_password" "scope" {
+  count   = var.deploy_agents ? 1 : 0
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret_version" "scope" {
+  count         = var.deploy_agents ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.scope[0].id
+  secret_string = random_password.scope[0].result
+}
+
+# --- MCP tool-server execution role: the ONLY role with data permissions ---
+resource "aws_iam_role" "mcp_exec" {
+  count = var.deploy_agents ? 1 : 0
+  name  = "${var.name_prefix}-mcp-exec"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "bedrock-agentcore.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "mcp_exec" {
+  count = var.deploy_agents ? 1 : 0
+  name  = "${var.name_prefix}-mcp-exec-policy"
+  role  = aws_iam_role.mcp_exec[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Bedrock"
+        Effect = "Allow"
+        Action = ["bedrock:InvokeModel", "bedrock:Retrieve", "bedrock:StartIngestionJob"]
+        Resource = [
+          "arn:aws:bedrock:*::foundation-model/${local.graph_construction_model_id}",
+          "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.generation_model_id}",
+          "arn:aws:bedrock:*::foundation-model/${local.generation_model_base_id}",
+          awscc_bedrock_knowledge_base.graphrag.knowledge_base_arn,
+        ]
+      },
+      {
+        Sid      = "InferenceProfileDescribe"
+        Effect   = "Allow"
+        Action   = ["bedrock:GetInferenceProfile"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ContentChunkAndResultBuckets"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = compact([
+          aws_s3_bucket.kb_chunks.arn, "${aws_s3_bucket.kb_chunks.arn}/*",
+          var.uploads_bucket_arn, var.uploads_bucket_arn == "" ? "" : "${var.uploads_bucket_arn}/*",
+          var.reading_results_bucket_arn, var.reading_results_bucket_arn == "" ? "" : "${var.reading_results_bucket_arn}/*",
+        ])
+      },
+      {
+        Sid      = "ReadScopeSecret"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [aws_secretsmanager_secret.scope[0].arn]
+      }
+    ]
+  })
+}
+
+resource "awscc_bedrockagentcore_runtime" "mcp" {
+  count = var.deploy_agents && try(var.mcp_image_uri, "") != "" ? 1 : 0
+
+  agent_runtime_name     = replace("${var.name_prefix}-mcp", "-", "_")
+  role_arn               = aws_iam_role.mcp_exec[0].arn
+  protocol_configuration = "MCP"
+
+  agent_runtime_artifact = {
+    container_configuration = {
+      container_uri = var.mcp_image_uri
+    }
+  }
+
+  network_configuration = {
+    network_mode = "PUBLIC"
+  }
+
+  environment_variables = {
+    APP_ENV                       = var.environment
+    AWS_REGION                    = data.aws_region.current.name
+    KNOWLEDGE_BASE_ID             = awscc_bedrock_knowledge_base.graphrag.knowledge_base_id
+    KNOWLEDGE_BASE_DATA_SOURCE_ID = awscc_bedrock_data_source.chunks.data_source_id
+    KB_CHUNK_BUCKET_NAME          = aws_s3_bucket.kb_chunks.id
+    UPLOADS_BUCKET_NAME           = var.uploads_bucket_name
+    READING_RESULTS_BUCKET_NAME   = var.reading_results_bucket_name
+    GENERATION_MODEL_ID           = var.generation_model_id
+    SCOPE_SIGNING_SECRET          = aws_secretsmanager_secret_version.scope[0].secret_string
+  }
 }
 
 resource "aws_iam_role" "agent_exec" {
@@ -234,38 +354,24 @@ resource "aws_iam_role_policy" "agent_exec" {
   name  = "${var.name_prefix}-agent-exec-policy"
   role  = aws_iam_role.agent_exec[0].id
 
+  # Least privilege: the agents hold NO direct S3/Bedrock/KB permissions. All
+  # content, retrieval, generation, and KB access happens through the MCP tool
+  # server, which the agents may only reach via InvokeAgentRuntime. The agents
+  # keep just their own job-status bookkeeping on the jobs table.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "Bedrock"
-        Effect = "Allow"
-        Action = [
-          "bedrock:InvokeModel", "bedrock:Retrieve", "bedrock:StartIngestionJob"
-        ]
-        Resource = ["*"]
-      },
-      {
-        Sid    = "ChunkAndArtifactBuckets"
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
-        Resource = compact([
-          aws_s3_bucket.kb_chunks.arn, "${aws_s3_bucket.kb_chunks.arn}/*",
-          var.uploads_bucket_arn, var.uploads_bucket_arn == "" ? "" : "${var.uploads_bucket_arn}/*",
-          var.reading_results_bucket_arn, var.reading_results_bucket_arn == "" ? "" : "${var.reading_results_bucket_arn}/*",
-        ])
-      },
-      {
-        Sid      = "JobAndConversationTables"
+        Sid      = "InvokeMcpToolServer"
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
-        Resource = compact([var.jobs_table_arn, var.conversations_table_arn])
+        Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource = ["${awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn}*"]
       },
       {
-        Sid      = "ConsumeJobQueue"
+        Sid      = "JobStatusBookkeeping"
         Effect   = "Allow"
-        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
-        Resource = var.jobs_queue_arn == "" ? ["*"] : [var.jobs_queue_arn]
+        Action   = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
+        Resource = compact([var.jobs_table_arn])
       }
     ]
   })
@@ -290,8 +396,10 @@ resource "awscc_bedrockagentcore_runtime" "agent" {
   environment_variables = {
     APP_ENV              = var.environment
     AWS_REGION           = data.aws_region.current.name
-    KNOWLEDGE_BASE_ID    = awscc_bedrock_knowledge_base.graphrag.knowledge_base_id
-    KB_CHUNK_BUCKET_NAME = aws_s3_bucket.kb_chunks.id
-    GENERATION_MODEL_ID  = var.generation_model_id
+    JOBS_TABLE_NAME      = var.jobs_table_name
+    MCP_RUNTIME_ARN      = try(awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn, "")
+    SCOPE_SIGNING_SECRET = aws_secretsmanager_secret_version.scope[0].secret_string
   }
+
+  depends_on = [awscc_bedrockagentcore_runtime.mcp]
 }

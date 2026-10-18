@@ -77,6 +77,18 @@ class Settings(BaseSettings):
     agent_runtime_arn_ingestion: str | None = None
     agent_runtime_arn_adaptive: str | None = None
 
+    # MCP tool tier. Agents reach the allowlisted tools only through this server
+    # (AgentCore runtime), never AWS directly. The scope secret signs per-job
+    # user_id so a compromised agent cannot impersonate another user; it is held
+    # only by the dispatcher (mint) and the MCP server (verify).
+    mcp_runtime_arn: str | None = None
+    scope_signing_secret: str | None = None
+
+    # Discussion AgentCore runtime (synchronous, invoked by the API). Routing
+    # discussion through the agent/MCP tier keeps Bedrock permissions off the
+    # API role entirely (tools only through the tool tier).
+    agent_runtime_arn_discussion: str | None = None
+
     # Explicit, opt-in local auth bypass for development only. Must never be
     # enabled outside app_env=local; it is ignored in dev/prod.
     auth_allow_local_dev_user: bool = False

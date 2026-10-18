@@ -109,3 +109,27 @@ variable "conversations_table_arn" {
   type        = string
   default     = ""
 }
+
+variable "mcp_image_uri" {
+  description = "ECR image URI for the MCP tool server (empty until pushed)."
+  type        = string
+  default     = ""
+}
+
+variable "uploads_bucket_name" {
+  description = "Uploads bucket name (MCP content tool)."
+  type        = string
+  default     = ""
+}
+
+variable "reading_results_bucket_name" {
+  description = "Reading-results bucket name (MCP reading-store tool)."
+  type        = string
+  default     = ""
+}
+
+variable "jobs_table_name" {
+  description = "Jobs table name (agents update job status)."
+  type        = string
+  default     = ""
+}

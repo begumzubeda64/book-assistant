@@ -22,6 +22,7 @@ from typing import Any, Protocol
 
 from src.core.logging import get_logger
 from src.integrations.agentcore import AgentInvokerPort
+from src.mcp_server.scope import mint_scope_token
 from src.models.job import JobType
 
 logger = get_logger(__name__)
@@ -44,9 +45,11 @@ class JobDispatcher:
         consumer: SqsConsumerPort,
         invoker: AgentInvokerPort,
         runtime_arns: dict[str, str],
+        scope_secret: str,
     ) -> None:
         self._consumer = consumer
         self._invoker = invoker
+        self._scope_secret = scope_secret
         # Map job type -> agent runtime ARN.
         self._routes = {
             JobType.BOOK_INGESTION.value: runtime_arns.get("ingestion", ""),
@@ -80,6 +83,23 @@ class JobDispatcher:
             # Unknown/unroutable type: delete to avoid a poison-message loop.
             self._consumer.delete(message["receipt_handle"])
             return False
+
+        # Mint a short-lived signed scope token binding the trusted user_id so
+        # the MCP tool server can authorize tool calls without trusting the
+        # (potentially compromised) agent to supply its own user_id.
+        user_id = body.get("user_id", "")
+        if not user_id:
+            logger.info("dispatcher_missing_user_id", extra={"job_type": job_type})
+            self._consumer.delete(message["receipt_handle"])
+            return False
+        body = {
+            **body,
+            "scope_token": mint_scope_token(
+                user_id=user_id,
+                job_id=body.get("job_id", ""),
+                secret=self._scope_secret,
+            ),
+        }
 
         try:
             self._invoker.invoke(runtime_arn, body)

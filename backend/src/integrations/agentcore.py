@@ -49,3 +49,34 @@ class AgentCoreInvoker:
             "agent_runtime_invoked",
             extra={"job_type": payload.get("job_type")},
         )
+
+
+class AgentCoreResponseInvoker:
+    """Request/response invoke of an AgentCore runtime (e.g. discussion).
+
+    Unlike the fire-and-forget dispatcher invoke, this reads and returns the
+    runtime's JSON response.
+    """
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> AgentCoreResponseInvoker:
+        import boto3
+
+        client = boto3.client("bedrock-agentcore", region_name=settings.aws_region)
+        return cls(client)
+
+    def invoke(self, runtime_arn: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._client.invoke_agent_runtime(
+            agentRuntimeArn=runtime_arn,
+            payload=json.dumps(payload).encode("utf-8"),
+        )
+        body = response.get("response")
+        # boto3 returns a streaming body; normalize to bytes then JSON.
+        if hasattr(body, "read"):
+            body = body.read()
+        if isinstance(body, bytes | bytearray):
+            body = body.decode("utf-8")
+        return json.loads(body) if body else {}

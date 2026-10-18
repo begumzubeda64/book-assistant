@@ -27,3 +27,18 @@ output "agent_runtime_arns" {
   description = "Map of agent name -> AgentCore runtime ARN (empty until deploy_agents)."
   value       = { for k, r in awscc_bedrockagentcore_runtime.agent : k => r.agent_runtime_arn }
 }
+
+output "mcp_runtime_arn" {
+  description = "MCP tool-server AgentCore runtime ARN (null until deployed)."
+  value       = try(awscc_bedrockagentcore_runtime.mcp[0].agent_runtime_arn, null)
+}
+
+output "discussion_runtime_arn" {
+  description = "Discussion AgentCore runtime ARN (null until deployed)."
+  value       = try(awscc_bedrockagentcore_runtime.agent["discussion"].agent_runtime_arn, null)
+}
+
+output "scope_secret_arn" {
+  description = "Scope-signing secret ARN (for the dispatcher/API to read)."
+  value       = try(aws_secretsmanager_secret.scope[0].arn, null)
+}

@@ -23,6 +23,9 @@ def build_dispatcher() -> JobDispatcher:
     if not settings.jobs_queue_url:
         raise RuntimeError("JOBS_QUEUE_URL is required for the dispatcher")
 
+    if not settings.scope_signing_secret:
+        raise RuntimeError("SCOPE_SIGNING_SECRET is required for the dispatcher")
+
     consumer = SqsConsumer.from_settings(settings, settings.jobs_queue_url)
     invoker = AgentCoreInvoker.from_settings(settings)
     runtime_arns = {
@@ -30,7 +33,10 @@ def build_dispatcher() -> JobDispatcher:
         "adaptive": settings.agent_runtime_arn_adaptive or "",
     }
     return JobDispatcher(
-        consumer=consumer, invoker=invoker, runtime_arns=runtime_arns
+        consumer=consumer,
+        invoker=invoker,
+        runtime_arns=runtime_arns,
+        scope_secret=settings.scope_signing_secret,
     )
 
 

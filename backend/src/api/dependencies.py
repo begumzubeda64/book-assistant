@@ -289,14 +289,18 @@ def get_discussion_service(settings: SettingsDep) -> DiscussionService:
 
     import boto3
 
-    from src.mcp_server.tools.generation import TextGenerationTool
-    from src.mcp_server.tools.graphrag import GraphRAGRetrievalTool
+    from src.agents.discussion.agent import RemoteDiscussionAgent
+    from src.integrations.agentcore import AgentCoreResponseInvoker
     from src.repositories.conversations import DynamoDBConversationRepository
 
     if not settings.conversations_table_name:
         raise ServiceUnavailableError("Discussions are not configured")
-    if not settings.knowledge_base_id:
-        raise ServiceUnavailableError("GraphRAG is not configured")
+    # Discussion runs in the isolated agent/MCP tier; the API only needs the
+    # discussion runtime ARN and the scope-signing secret, never Bedrock perms.
+    if not settings.agent_runtime_arn_discussion:
+        raise ServiceUnavailableError("Discussion agent is not configured")
+    if not settings.scope_signing_secret:
+        raise ServiceUnavailableError("Scope signing is not configured")
 
     dynamodb = boto3.resource(
         "dynamodb",
@@ -307,16 +311,11 @@ def get_discussion_service(settings: SettingsDep) -> DiscussionService:
         dynamodb.Table(settings.conversations_table_name)
     )
 
-    agent_runtime = boto3.client(
-        "bedrock-agent-runtime", region_name=settings.aws_region
+    agent = RemoteDiscussionAgent(
+        invoker=AgentCoreResponseInvoker.from_settings(settings),
+        runtime_arn=settings.agent_runtime_arn_discussion,
+        scope_secret=settings.scope_signing_secret,
     )
-    bedrock_runtime = boto3.client(
-        "bedrock-runtime", region_name=settings.aws_region
-    )
-    retriever = GraphRAGRetrievalTool(agent_runtime, settings.knowledge_base_id)
-    generator = TextGenerationTool(bedrock_runtime, settings.generation_model_id)
-
-    agent = DiscussionAgent(retriever=retriever, generator=generator)
     return DiscussionService(repository=repo, agent=agent)
 
 

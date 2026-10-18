@@ -1,25 +1,45 @@
 # Adaptive-reading agent image (LangGraph on Amazon Bedrock AgentCore Runtime).
 #
-# One of three ISOLATED agent images (see decisions.md). Separate from the
-# FastAPI image and the other agent images.
+# One of three ISOLATED agent images (decisions.md). Book content, generation,
+# and result storage all go through the MCP tool server; the agent holds no
+# direct AWS data permissions beyond its job-status bookkeeping.
 #
 # Build context is backend/:  docker build -f agents/Dockerfile.adaptive_reading .
-#
-# Stub for milestone 1: the LangGraph graph and bedrock-agentcore entrypoint are
-# implemented in task group 8.
+
+FROM python:3.11-slim AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --extra agents
+
+COPY src ./src
+COPY README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra agents
 
 FROM python:3.11-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH"
 
 RUN groupadd --system agent && useradd --system --gid agent --home /app agent
 
 WORKDIR /app
 
-COPY --chown=agent:agent src/agents/shared ./agents/shared
-COPY --chown=agent:agent src/agents/adaptive_reading ./agents/adaptive_reading
+COPY --from=builder --chown=agent:agent /app/.venv /app/.venv
+COPY --chown=agent:agent src ./src
 
 USER agent
 
-CMD ["python", "-c", "print('adaptive-reading agent placeholder - implemented in group 8')"]
+EXPOSE 8080
+
+CMD ["python", "-m", "src.agents.adaptive_reading.main"]

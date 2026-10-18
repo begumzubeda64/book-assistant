@@ -6,5 +6,8 @@ terraform {
     awscc = {
       source = "hashicorp/awscc"
     }
+    random = {
+      source = "hashicorp/random"
+    }
   }
 }

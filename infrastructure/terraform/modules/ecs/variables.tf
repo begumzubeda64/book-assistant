@@ -23,20 +23,10 @@ variable "api_image" {
   type        = string
 }
 
-variable "mcp_image" {
-  description = "Full ECR image reference for the MCP tool server."
-  type        = string
-}
-
 # Ports / sizing
 variable "app_port" {
   type    = number
   default = 8000
-}
-
-variable "mcp_port" {
-  type    = number
-  default = 8080
 }
 
 variable "api_cpu" {
@@ -47,16 +37,6 @@ variable "api_cpu" {
 variable "api_memory" {
   type    = number
   default = 1024
-}
-
-variable "mcp_cpu" {
-  type    = number
-  default = 256
-}
-
-variable "mcp_memory" {
-  type    = number
-  default = 512
 }
 
 variable "api_desired_count" {
@@ -114,4 +94,28 @@ variable "agent_runtime_arns" {
   description = "AgentCore runtime ARNs the dispatcher may invoke."
   type        = list(string)
   default     = ["*"]
+}
+
+variable "api_invoke_runtime_arns" {
+  description = "AgentCore runtime ARNs the API may invoke (e.g. discussion)."
+  type        = list(string)
+  default     = []
+}
+
+variable "api_secret_arns" {
+  description = "Secrets Manager ARNs the API task role may read."
+  type        = list(string)
+  default     = []
+}
+
+variable "dispatcher_secret_arns" {
+  description = "Secrets Manager ARNs the dispatcher task role may read."
+  type        = list(string)
+  default     = []
+}
+
+variable "scope_secret_arn" {
+  description = "Scope-signing secret ARN, injected into API/dispatcher as SCOPE_SIGNING_SECRET."
+  type        = string
+  default     = ""
 }

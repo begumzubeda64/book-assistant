@@ -33,6 +33,22 @@ resource "aws_iam_role_policy_attachment" "execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Allow the execution role to resolve the scope secret for container `secrets`
+# injection (API + dispatcher). Scoped to the one secret.
+resource "aws_iam_role_policy" "execution_secrets" {
+  count = var.scope_secret_arn == "" ? 0 : 1
+  name  = "${var.name_prefix}-ecs-execution-secrets"
+  role  = aws_iam_role.execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [var.scope_secret_arn]
+    }]
+  })
+}
+
 # --- API task role: least privilege for the application tier ---
 resource "aws_iam_role" "api_task" {
   name = "${var.name_prefix}-api-task"
@@ -77,43 +93,56 @@ resource "aws_iam_role_policy" "api_task" {
   })
 }
 
-# --- MCP task role: scoped to KB + chunk/result buckets ---
-resource "aws_iam_role" "mcp_task" {
-  name = "${var.name_prefix}-mcp-task"
-  assume_role_policy = jsonencode({
+# API invokes the discussion AgentCore runtime (discussion runs in the agent/MCP
+# tier, not the API). Granted only when there are runtime ARNs to invoke.
+resource "aws_iam_role_policy" "api_invoke_runtimes" {
+  count = length(var.api_invoke_runtime_arns) > 0 ? 1 : 0
+  name  = "${var.name_prefix}-api-invoke-runtimes"
+  role  = aws_iam_role.api_task.id
+  policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
+      Sid      = "InvokeDiscussionRuntime"
+      Effect   = "Allow"
+      Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
+      Resource = [for a in var.api_invoke_runtime_arns : "${a}*"]
     }]
   })
 }
 
-resource "aws_iam_role_policy" "mcp_task" {
-  name = "${var.name_prefix}-mcp-task-policy"
-  role = aws_iam_role.mcp_task.id
+# Read the scope-signing secret (API mints discussion scope tokens).
+resource "aws_iam_role_policy" "api_secrets" {
+  count = length(var.api_secret_arns) > 0 ? 1 : 0
+  name  = "${var.name_prefix}-api-secrets"
+  role  = aws_iam_role.api_task.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "S3"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
-        Resource = concat(var.app_bucket_arns, [for b in var.app_bucket_arns : "${b}/*"])
-      },
-      {
-        Sid    = "Bedrock"
-        Effect = "Allow"
-        Action = [
-          "bedrock:InvokeModel", "bedrock:Retrieve",
-          "bedrock:StartIngestionJob"
-        ]
-        Resource = ["*"]
-      }
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = var.api_secret_arns
+    }]
   })
 }
+
+# Dispatcher reads the scope-signing secret to mint per-job tokens.
+resource "aws_iam_role_policy" "dispatcher_secrets" {
+  count = var.dispatcher_image != "" && length(var.dispatcher_secret_arns) > 0 ? 1 : 0
+  name  = "${var.name_prefix}-dispatcher-secrets"
+  role  = aws_iam_role.dispatcher_task.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = var.dispatcher_secret_arns
+    }]
+  })
+}
+
+# NOTE: The MCP tool server runs as its own AgentCore runtime (see the ai
+# module), NOT as an ECS task. All Bedrock/KB/data permissions live on the MCP
+# runtime's execution role there; the API task role below holds none.
 
 # --- Task definitions ---
 resource "aws_ecs_task_definition" "api" {
@@ -132,40 +161,16 @@ resource "aws_ecs_task_definition" "api" {
       essential    = true
       portMappings = [{ containerPort = var.app_port, protocol = "tcp" }]
       environment  = [for k, v in var.api_environment : { name = k, value = v }]
+      # Inject the scope-signing secret from Secrets Manager (never plaintext).
+      secrets = var.scope_secret_arn == "" ? [] : [
+        { name = "SCOPE_SIGNING_SECRET", valueFrom = var.scope_secret_arn }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = var.log_group_name
           "awslogs-region"        = data.aws_region.current.name
           "awslogs-stream-prefix" = "api"
-        }
-      }
-    }
-  ])
-}
-
-resource "aws_ecs_task_definition" "mcp" {
-  family                   = "${var.name_prefix}-mcp"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = var.mcp_cpu
-  memory                   = var.mcp_memory
-  execution_role_arn       = aws_iam_role.execution.arn
-  task_role_arn            = aws_iam_role.mcp_task.arn
-
-  container_definitions = jsonencode([
-    {
-      name         = "mcp"
-      image        = var.mcp_image
-      essential    = true
-      portMappings = [{ containerPort = var.mcp_port, protocol = "tcp" }]
-      environment  = [for k, v in var.api_environment : { name = k, value = v }]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = var.log_group_name
-          "awslogs-region"        = data.aws_region.current.name
-          "awslogs-stream-prefix" = "mcp"
         }
       }
     }
@@ -193,22 +198,6 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_iam_role_policy.api_task]
-}
-
-resource "aws_ecs_service" "mcp" {
-  name            = "${var.name_prefix}-mcp"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.mcp.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = var.private_subnet_ids
-    security_groups  = [var.tasks_security_group_id]
-    assign_public_ip = false
-  }
-
-  depends_on = [aws_iam_role_policy.mcp_task]
 }
 
 # --- Dispatcher: SQS -> AgentCore bridge (own tier, no ALB) ---
@@ -263,6 +252,9 @@ resource "aws_ecs_task_definition" "dispatcher" {
       # Reuse the API image; run the dispatcher entrypoint instead of the server.
       command     = ["python", "-m", "src.workflows.dispatcher_main"]
       environment = [for k, v in var.dispatcher_environment : { name = k, value = v }]
+      secrets = var.scope_secret_arn == "" ? [] : [
+        { name = "SCOPE_SIGNING_SECRET", valueFrom = var.scope_secret_arn }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
