@@ -35,6 +35,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
+# Remove base-image build tooling (pip/setuptools/wheel) not needed at runtime;
+# it ships packages with HIGH CVEs the image scan flags.
+RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true; \
+    find /usr/local/lib/python3.11/site-packages \
+      \( -name 'setuptools*' -o -name 'wheel*' -o -name 'pip*' -o -name 'pkg_resources*' \) \
+      -exec rm -rf {} + 2>/dev/null || true
+
 RUN groupadd --system mcp && useradd --system --gid mcp --home /app mcp
 
 WORKDIR /app

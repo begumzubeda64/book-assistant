@@ -1,0 +1,12 @@
+# Trivy vulnerability ignore list — each entry MUST carry a justification.
+#
+# CVE-2026-104873 — langgraph-sdk 0.2.15 (Authorization bypass)
+# Justification: langgraph-sdk is a transitive dependency of langgraph; it is the
+# CLIENT for the LangGraph Platform / Cloud API. Our agents run LOCAL LangGraph
+# graphs (StateGraph.invoke) and never use the SDK client or talk to LangGraph
+# Platform, so the authorization-bypass path is not reachable in our runtime.
+# The fix requires langgraph-sdk >=0.4.4, but every langgraph release that imports
+# cleanly (0.6.x) pins langgraph-sdk <0.4.4, and the one release that allows the
+# fix (0.5.0) has an import-time MRO bug. Revisit when langgraph publishes a
+# clean release compatible with langgraph-sdk >=0.4.4.
+CVE-2026-104873
