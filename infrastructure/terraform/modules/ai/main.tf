@@ -34,6 +34,76 @@ locals {
   # Underlying foundation-model id behind the generation inference profile,
   # used to grant the MCP role InvokeModel on the model the profile routes to.
   generation_model_base_id = replace(var.generation_model_id, "/^(eu|us|apac|global)[.]/", "")
+
+  # Baseline permissions every AgentCore runtime execution role needs to start
+  # and operate: pull its image from ECR, write logs + traces, emit metrics, and
+  # mint workload-access tokens. (Per the AWS AgentCore Terraform sample.)
+  agentcore_baseline_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EcrImagePull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability",
+        ]
+        Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${var.name_prefix}-*"
+      },
+      {
+        Sid      = "EcrAuthToken"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents",
+        ]
+        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
+      },
+      {
+        Sid    = "XRayTracing"
+        Effect = "Allow"
+        Action = [
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords",
+          "xray:GetSamplingRules",
+          "xray:GetSamplingTargets",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "CloudWatchMetrics"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = { "cloudwatch:namespace" = "bedrock-agentcore" }
+        }
+      },
+      {
+        Sid    = "WorkloadAccessTokens"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:GetWorkloadAccessToken",
+          "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
+          "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
+        ]
+        Resource = [
+          "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:workload-identity-directory/default",
+          "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:workload-identity-directory/default/workload-identity/*",
+        ]
+      },
+    ]
+  })
 }
 
 # --- Prepared-chunk store (ingested content, ownership-scoped by key prefix) ---
@@ -252,9 +322,21 @@ resource "aws_iam_role" "mcp_exec" {
       Action    = "sts:AssumeRole"
       Condition = {
         StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        ArnLike = {
+          "aws:SourceArn" = "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
+        }
       }
     }]
   })
+}
+
+# Baseline permissions every AgentCore runtime needs to start and run: pull its
+# image from ECR, write logs/traces, and mint workload-access tokens.
+resource "aws_iam_role_policy" "mcp_exec_baseline" {
+  count  = var.deploy_agents ? 1 : 0
+  name   = "${var.name_prefix}-mcp-exec-baseline"
+  role   = aws_iam_role.mcp_exec[0].id
+  policy = local.agentcore_baseline_policy
 }
 
 resource "aws_iam_role_policy" "mcp_exec" {
@@ -344,9 +426,20 @@ resource "aws_iam_role" "agent_exec" {
       Action    = "sts:AssumeRole"
       Condition = {
         StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        ArnLike = {
+          "aws:SourceArn" = "arn:aws:bedrock-agentcore:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
+        }
       }
     }]
   })
+}
+
+# Baseline AgentCore permissions (ECR pull, logs/traces, workload tokens).
+resource "aws_iam_role_policy" "agent_exec_baseline" {
+  count  = var.deploy_agents ? 1 : 0
+  name   = "${var.name_prefix}-agent-exec-baseline"
+  role   = aws_iam_role.agent_exec[0].id
+  policy = local.agentcore_baseline_policy
 }
 
 resource "aws_iam_role_policy" "agent_exec" {
