@@ -81,9 +81,20 @@ class McpToolClient:
         self._scope_token = scope_token
 
     def call(self, name: str, arguments: dict[str, Any]) -> Any:
-        import anyio
+        import asyncio
 
-        return anyio.run(self._call_async, name, arguments)
+        coro = self._call_async(name, arguments)
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop: safe to drive one directly.
+            return asyncio.run(coro)
+        # Called from within a running loop (the agent's asyncio.run): run the
+        # async MCP call on a fresh loop in a worker thread to avoid nesting.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
 
     async def _call_async(self, name: str, arguments: dict[str, Any]) -> Any:
         from mcp import ClientSession

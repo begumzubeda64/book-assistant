@@ -63,8 +63,10 @@ class IngestionAgent:
         try:
             result = self._graph.invoke(state)
         except Exception as exc:
-            logger.info(
-                "ingestion_failed",
+            logger.exception(
+                "ingestion_failed: %s: %s",
+                type(exc).__name__,
+                exc,
                 extra={"job_id": job_id, "error_type": type(exc).__name__},
             )
             await self._jobs.update_status(

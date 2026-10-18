@@ -72,8 +72,10 @@ class AdaptiveReadingAgent:
                 user_id=job.user_id, reading_id=job_id, payload=payload
             )
         except Exception as exc:
-            logger.info(
-                "reading_failed",
+            logger.exception(
+                "reading_failed: %s: %s",
+                type(exc).__name__,
+                exc,
                 extra={"job_id": job_id, "error_type": type(exc).__name__},
             )
             await self._jobs.update_status(

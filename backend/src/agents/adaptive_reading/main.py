@@ -59,9 +59,13 @@ def _build_agent(scope_token: str) -> AdaptiveReadingAgent:
 def handler(payload: dict[str, Any]) -> dict[str, Any]:
     """AgentCore entrypoint: process one ADAPTIVE_READING job."""
     configure_logging(get_settings().log_level)
-    scope_token = payload.get("scope_token", "")
-    agent = _build_agent(scope_token)
-    asyncio.run(agent.handle_message(payload))
+    try:
+        scope_token = payload.get("scope_token", "")
+        agent = _build_agent(scope_token)
+        asyncio.run(agent.handle_message(payload))
+    except Exception:
+        logger.exception("adaptive_entrypoint_error")
+        raise
     return {"status": "ok", "job_id": payload.get("job_id")}
 
 
