@@ -123,7 +123,10 @@ def test_deletion_is_scoped_to_the_requesting_user() -> None:
     )
     assert kb.calls == [("u1", "b1")]
     # No other user's key could be constructed or deleted.
-    assert all(k.startswith("uploads/u1/") or k.startswith("readings/u1/") for k in s3.deleted)
+    assert all(
+        k.startswith("uploads/u1/") or k.startswith("readings/u1/")
+        for k in s3.deleted
+    )
 
 
 def test_idempotent_when_nothing_exists() -> None:

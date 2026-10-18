@@ -117,7 +117,7 @@ module "ecs" {
     module.ai.discussion_runtime_arn,
     module.ai.mcp_runtime_arn,
   ]) : []
-  api_secret_arns         = var.deploy_agents ? compact([module.ai.scope_secret_arn]) : []
+  api_secret_arns = var.deploy_agents ? compact([module.ai.scope_secret_arn]) : []
 
   # Dispatcher: enabled once agents are deployed (needs their runtime ARNs).
   dispatcher_image       = var.deploy_agents ? "${module.ecr.repository_urls["api"]}:${var.image_tag}" : ""
