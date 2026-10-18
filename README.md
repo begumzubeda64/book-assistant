@@ -14,6 +14,12 @@ The MVP delivers three primary capabilities — **adaptive reading**, **GraphRAG
 discussion**, and **recommendations** — supported by book discovery, authorized
 PDF upload, asynchronous job processing, and reading-progress tracking.
 
+The stack is **deployed and running on AWS** in `eu-central-1`. Adaptive reading,
+GraphRAG discussion (with streaming answers and selectable personas), discovery,
+upload, async jobs, and progress are working end to end. Recommendations is the
+one feature not yet fully functional — the scoring is built and tested, but its
+signals provider is still a stub (see Status below).
+
 ## Features
 
 - **Adaptive reading** — Quick / Balanced / Deep (≈3/5/10 min) at 150 WPM, with a
@@ -21,8 +27,13 @@ PDF upload, asynchronous job processing, and reading-progress tracking.
   source references — not truncation.
 - **GraphRAG discussion** — ask questions about an authorized book; answers are
   grounded in the book with chapter/page citations and connect ideas across it.
+  Answers stream back in real time over SSE, with selectable conversation
+  personas (Podcast Host, Scholar, Coach, Skeptic, Storyteller, The Wit) and
+  smart, intent-based conversation titles.
 - **Recommendations** — transparent, explainable scoring over your reading
-  signals (each pick carries a reason).
+  signals (each pick carries a reason). _Scoring is implemented and tested; the
+  signals provider is currently a stub, so this feature is not yet fully
+  functional end to end._
 - **Discovery** — search by title/author/ISBN (Google Books + Open Library).
 - **Authorized upload** — private per-user PDFs via short-lived presigned URLs;
   the file never passes through the API.
@@ -48,6 +59,15 @@ Three isolated tiers (application / agents / MCP tools) that fail independently.
 Region: **`eu-central-1` (Europe, Frankfurt)**. Full detail in
 **[docs/architecture.md](docs/architecture.md)**.
 
+### Deployment
+
+The environment is deployed to AWS and released **manually**: build the five
+container images tagged with the current git SHA, push to ECR, run
+`terraform apply -var image_tag=<sha>`, then publish the frontend to S3 and
+invalidate CloudFront. The frontend is served from CloudFront and the API from a
+CloudFront distribution in front of the ALB. See
+**[docs/deployment.md](docs/deployment.md)** for the runbook.
+
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) — architecture + diagram, tiers, tradeoffs
@@ -56,7 +76,9 @@ Region: **`eu-central-1` (Europe, Frankfurt)**. Full detail in
 - [docs/local-mock.md](docs/local-mock.md) — run the whole flow locally, no AWS
 - [docs/e2e-validation.md](docs/e2e-validation.md) — end-to-end happy-path checklist
 - [docs/deployment.md](docs/deployment.md) — AWS deployment runbook
-- `.kiro/steering/` + `.kiro/specs/mvp/` — product/tech/security steering and the MVP spec
+
+> Product/tech/security steering and the MVP spec live under `.kiro/` on the
+> `dev` branch (not tracked on `main`).
 
 ## Repository layout
 
@@ -66,8 +88,9 @@ frontend/         React + TypeScript + Vite frontend
 infrastructure/   Terraform (networking, ECS, ALB, ECR, Cognito, storage, ...)
 docs/             Documentation
 scripts/          Helper scripts
-.kiro/            Steering and MVP spec
 ```
+
+> Steering and the MVP spec (`.kiro/`) are tracked on the `dev` branch only.
 
 ## Prerequisites
 
@@ -138,9 +161,14 @@ python scripts/e2e_smoke.py --base-url http://localhost:8000
 
 ## Status
 
-MVP feature-complete across discovery, authorized upload, async ingestion +
-GraphRAG, adaptive reading, discussion, progress, and recommendations, with a
-React frontend, CI/CD, and security/observability hardening. Remaining work is
-real-AWS provisioning and the live end-to-end run (`terraform apply` + deploy),
-plus portfolio polish. Progress tracks the plan in
-`.kiro/specs/mvp/tasks.md`.
+Deployed and running on AWS (`eu-central-1`). Working end to end: discovery,
+authorized upload, async ingestion + GraphRAG, adaptive reading, GraphRAG
+discussion (streaming answers + personas), and reading progress — with a React
+frontend, CI/CD, and security/observability hardening.
+
+**Not yet fully functional:** recommendations. The scoring logic
+(`services/recommendation_scoring.py`) is implemented and unit-tested, but the
+signals provider is a stub (no reading-history / saved-concepts store yet), so
+the endpoint returns an empty list. Wiring the signals provider to real data is
+a localized change that does not touch the scoring formula. See
+[docs/decisions.md](docs/decisions.md).
