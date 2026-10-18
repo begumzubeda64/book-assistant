@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState, Spinner } from "@/components/states";
+import { friendlyError } from "@/services/errors";
 import { getReading } from "@/services/reading";
 import { saveProgress } from "@/services/progress";
 import type { ReadingResult } from "@/types/reading";
@@ -29,7 +30,7 @@ export function ReadingPage() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Failed to load reading",
+        message: friendlyError(err, "We couldn't load this reading."),
       });
     }
   }, [readingId]);

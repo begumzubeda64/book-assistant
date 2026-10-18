@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useParams } from "react-router-dom";
 
 import { ErrorState, Spinner } from "@/components/states";
+import { friendlyError } from "@/services/errors";
 import { getConversation, postMessage } from "@/services/discussions";
 import type { Citation, DiscussionMessage } from "@/types/discussions";
 
@@ -66,7 +67,7 @@ export function DiscussionPage() {
     } catch (err) {
       setLoad({
         kind: "error",
-        message: err instanceof Error ? err.message : "Failed to load discussion",
+        message: friendlyError(err, "We couldn't load this discussion."),
       });
     }
   }, [conversationId]);
@@ -101,7 +102,7 @@ export function DiscussionPage() {
       const answer = await postMessage(conversationId, { question: text });
       setMessages((prev) => [...prev, answer]);
     } catch (err) {
-      setAskError(err instanceof Error ? err.message : "Failed to get an answer");
+      setAskError(friendlyError(err, "We couldn't get an answer. Please try again."));
     } finally {
       setAsking(false);
     }

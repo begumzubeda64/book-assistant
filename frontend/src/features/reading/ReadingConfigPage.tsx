@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
 import { generateReading } from "@/services/reading";
 import { pollJob } from "@/services/jobs";
+import { friendlyError, friendlyJobFailure } from "@/services/errors";
 import { getUploadedBook } from "@/stores/uploadedBooks";
 import {
   READING_FOCUSES,
@@ -43,20 +44,13 @@ export function ReadingConfigPage() {
         focus,
       });
       const final = await pollJob(job.job_id, {
-        onUpdate: (j) =>
-          setState({
-            kind: "generating",
-            label:
-              j.status === "QUEUED"
-                ? "Queued…"
-                : `Generating… ${j.progress}%`,
-          }),
+        intervalMs: 3000,
+        maxAttempts: 100, // ~5 min: generation + model latency
+        onUpdate: () =>
+          setState({ kind: "generating", label: "Creating your reading…" }),
       });
       if (final.status === "FAILED") {
-        setState({
-          kind: "error",
-          message: `Generation failed (${final.error_code ?? "unknown"}).`,
-        });
+        setState({ kind: "error", message: friendlyJobFailure("reading") });
         return;
       }
       // reading_id == job_id
@@ -64,7 +58,10 @@ export function ReadingConfigPage() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Generation failed",
+        message: friendlyError(
+          err,
+          "We couldn't create this reading. Please try again.",
+        ),
       });
     }
   }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { ErrorState, Spinner } from "@/components/states";
+import { friendlyError } from "@/services/errors";
 import { createConversation } from "@/services/discussions";
 
 export function DiscussionStartPage() {
@@ -21,7 +22,7 @@ export function DiscussionStartPage() {
         }),
       )
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Could not start discussion"),
+        setError(friendlyError(err, "We couldn't start this discussion.")),
       );
   }, [bookId, navigate]);
 

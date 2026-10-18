@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 
 import { EmptyState, ErrorState, Spinner } from "@/components/states";
 import { BookCard } from "@/features/books/BookCard";
+import { friendlyError } from "@/services/errors";
 import { searchBooks } from "@/services/books";
 import type { BookMetadata } from "@/types/books";
 
@@ -25,7 +26,7 @@ export function DiscoverPage() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Search failed",
+        message: friendlyError(err, "Search didn't work. Please try again."),
       });
     }
   }

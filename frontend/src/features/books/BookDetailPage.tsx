@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { ErrorState, Spinner } from "@/components/states";
+import { friendlyError } from "@/services/errors";
 import { getBook } from "@/services/books";
 import type { BookMetadata } from "@/types/books";
 
@@ -23,7 +24,7 @@ export function BookDetailPage() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Failed to load book",
+        message: friendlyError(err, "We couldn't load this book."),
       });
     }
   }, [bookId]);

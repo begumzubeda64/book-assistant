@@ -4,7 +4,8 @@ import { ErrorState } from "@/components/states";
 import { useAuth } from "@/features/auth/useAuth";
 import { ingestBook, presignUpload, uploadToS3 } from "@/services/uploads";
 import { pollJob } from "@/services/jobs";
-import { addUploadedBook } from "@/stores/uploadedBooks";
+import { friendlyError, friendlyJobFailure } from "@/services/errors";
+import { addUploadedBook, removeUploadedBook } from "@/stores/uploadedBooks";
 import type { JobStatus } from "@/types/jobs";
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -69,15 +70,17 @@ export function UploadBook({ onUploaded }: { onUploaded: () => void }) {
 
       setStep({ kind: "processing", status: job.status, progress: 0 });
       const final = await pollJob(job.job_id, {
+        intervalMs: 3000,
+        maxAttempts: 120, // ~6 min: ingestion includes GraphRAG build
         onUpdate: (j) =>
           setStep({ kind: "processing", status: j.status, progress: j.progress }),
       });
 
       if (final.status === "FAILED") {
-        setStep({
-          kind: "error",
-          message: `Ingestion failed (${final.error_code ?? "unknown"}).`,
-        });
+        // Don't leave a broken book in the library.
+        removeUploadedBook(user.userId, presigned.book_id);
+        onUploaded();
+        setStep({ kind: "error", message: friendlyJobFailure("ingestion") });
         return;
       }
       setStep({ kind: "done" });
@@ -85,7 +88,7 @@ export function UploadBook({ onUploaded }: { onUploaded: () => void }) {
     } catch (err) {
       setStep({
         kind: "error",
-        message: err instanceof Error ? err.message : "Upload failed",
+        message: friendlyError(err, "We couldn't upload this book. Please try again."),
       });
     }
   }
@@ -110,11 +113,7 @@ export function UploadBook({ onUploaded }: { onUploaded: () => void }) {
 
   if (step.kind === "uploading" || step.kind === "processing") {
     const label =
-      step.kind === "uploading"
-        ? step.label
-        : step.status === "QUEUED"
-          ? "Queued for ingestion…"
-          : `Processing… ${step.progress}%`;
+      step.kind === "uploading" ? step.label : "Preparing your book…";
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex items-center gap-2 text-slate-600">
@@ -122,7 +121,8 @@ export function UploadBook({ onUploaded }: { onUploaded: () => void }) {
           <span className="text-sm">{label}</span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          Ingestion runs in the background — this can take a little while.
+          We&apos;re getting your book ready. This can take a little while — you
+          can keep browsing and come back.
         </p>
       </div>
     );

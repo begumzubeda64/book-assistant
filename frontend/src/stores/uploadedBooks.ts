@@ -40,3 +40,8 @@ export function getUploadedBook(
 ): UploadedBook | undefined {
   return listUploadedBooks(userId).find((b) => b.bookId === bookId);
 }
+
+export function removeUploadedBook(userId: string, bookId: string): void {
+  const next = listUploadedBooks(userId).filter((b) => b.bookId !== bookId);
+  localStorage.setItem(key(userId), JSON.stringify(next));
+}

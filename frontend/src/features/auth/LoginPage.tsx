@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { friendlyError } from "@/services/errors";
 import { useAuth } from "@/features/auth/useAuth";
 
 export function LoginPage() {
@@ -18,7 +19,7 @@ export function LoginPage() {
       await signIn();
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
+      setError(friendlyError(err, "Sign-in failed. Please try again."));
     }
   }
 

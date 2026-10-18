@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { EmptyState, ErrorState, Spinner } from "@/components/states";
 import { BookCard } from "@/features/books/BookCard";
+import { friendlyError } from "@/services/errors";
 import { getRecommendations } from "@/services/recommendations";
 import type { RecommendationItem } from "@/types/recommendations";
 
@@ -21,7 +22,7 @@ export function RecommendationsPage() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Failed to load recommendations",
+        message: friendlyError(err, "We couldn't load recommendations right now."),
       });
     }
   }, []);

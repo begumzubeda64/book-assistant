@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { ErrorState, Spinner } from "@/components/states";
+import { friendlyError } from "@/services/errors";
 import { handleCallback } from "@/features/auth/cognito";
 import { useAuth } from "@/features/auth/useAuth";
 
@@ -33,7 +34,7 @@ export function AuthCallbackPage() {
         navigate("/", { replace: true });
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Sign-in failed"),
+        setError(friendlyError(err, "Sign-in didn't complete. Please try again.")),
       );
   }, [params, navigate, refreshUser]);
 
