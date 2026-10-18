@@ -36,7 +36,7 @@ resource "aws_iam_role_policy_attachment" "execution" {
 # Allow the execution role to resolve the scope secret for container `secrets`
 # injection (API + dispatcher). Scoped to the one secret.
 resource "aws_iam_role_policy" "execution_secrets" {
-  count = var.scope_secret_arn == "" ? 0 : 1
+  count = var.enable_agent_integration ? 1 : 0
   name  = "${var.name_prefix}-ecs-execution-secrets"
   role  = aws_iam_role.execution.id
   policy = jsonencode({
@@ -96,7 +96,7 @@ resource "aws_iam_role_policy" "api_task" {
 # API invokes the discussion AgentCore runtime (discussion runs in the agent/MCP
 # tier, not the API). Granted only when there are runtime ARNs to invoke.
 resource "aws_iam_role_policy" "api_invoke_runtimes" {
-  count = length(var.api_invoke_runtime_arns) > 0 ? 1 : 0
+  count = var.enable_agent_integration ? 1 : 0
   name  = "${var.name_prefix}-api-invoke-runtimes"
   role  = aws_iam_role.api_task.id
   policy = jsonencode({
@@ -112,7 +112,7 @@ resource "aws_iam_role_policy" "api_invoke_runtimes" {
 
 # Read the scope-signing secret (API mints discussion scope tokens).
 resource "aws_iam_role_policy" "api_secrets" {
-  count = length(var.api_secret_arns) > 0 ? 1 : 0
+  count = var.enable_agent_integration ? 1 : 0
   name  = "${var.name_prefix}-api-secrets"
   role  = aws_iam_role.api_task.id
   policy = jsonencode({
@@ -127,7 +127,7 @@ resource "aws_iam_role_policy" "api_secrets" {
 
 # Dispatcher reads the scope-signing secret to mint per-job tokens.
 resource "aws_iam_role_policy" "dispatcher_secrets" {
-  count = var.dispatcher_image != "" && length(var.dispatcher_secret_arns) > 0 ? 1 : 0
+  count = var.enable_agent_integration ? 1 : 0
   name  = "${var.name_prefix}-dispatcher-secrets"
   role  = aws_iam_role.dispatcher_task.id
   policy = jsonencode({

@@ -119,3 +119,14 @@ variable "scope_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "enable_agent_integration" {
+  description = <<-EOT
+    Statically-known flag (= deploy_agents) that gates the agent/MCP integration
+    IAM (invoke-runtime, secret read/injection). Separate from the ARN inputs so
+    count is known at plan time even though the ARNs are created in the same
+    apply.
+  EOT
+  type        = bool
+  default     = false
+}

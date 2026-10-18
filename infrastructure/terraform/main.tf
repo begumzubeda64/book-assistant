@@ -83,8 +83,9 @@ module "ecs" {
     module.storage.uploads_bucket_arn,
     module.storage.reading_results_bucket_arn,
   ]
-  jobs_queue_arn   = module.messaging.jobs_queue_arn
-  scope_secret_arn = var.deploy_agents ? module.ai.scope_secret_arn : ""
+  jobs_queue_arn           = module.messaging.jobs_queue_arn
+  scope_secret_arn         = var.deploy_agents ? module.ai.scope_secret_arn : ""
+  enable_agent_integration = var.deploy_agents
 
   api_environment = {
     APP_ENV              = var.environment
