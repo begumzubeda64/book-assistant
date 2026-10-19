@@ -57,3 +57,6 @@ secrets.tfvars
 
 # macOS
 .DS_Store
+
+# Local-only, never-pushed personal docs
+_private/
