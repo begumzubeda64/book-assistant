@@ -20,7 +20,7 @@ dependencies = [
 # Agent-tier dependencies. Installed into the agent images and the MCP server
 # image, NOT the FastAPI application image (keeps the API image lean).
 agents = [
-    "langgraph>=0.6.6,<1.0",
+    "langgraph>=0.6.6,<2.0",
     "bedrock-agentcore>=1.18.1,<2.0",
     "pypdf>=6.14.2,<8.0",
     "mcp>=1.2,<2.0",
@@ -32,7 +32,7 @@ dev = [
     "mypy>=1.10,<2.0",
     "boto3-stubs[dynamodb,s3,sqs]>=1.34,<2.0",
     # Agent deps are needed locally to run and test the agent pipeline.
-    "langgraph>=0.6.6,<1.0",
+    "langgraph>=0.6.6,<2.0",
     "bedrock-agentcore>=1.18.1,<2.0",
     "pypdf>=6.14.2,<8.0",
     "mcp>=1.2,<2.0",
